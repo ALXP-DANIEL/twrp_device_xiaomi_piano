@@ -1,0 +1,13 @@
+DEVICE_PATH := device/xiaomi/piano
+
+$(call inherit-product, $(SRC_TARGET_DIR)/product/base.mk)
+$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
+$(call inherit-product, $(SRC_TARGET_DIR)/product/emulated_storage.mk)
+$(call inherit-product, vendor/twrp/config/common.mk)
+
+PRODUCT_USE_DYNAMIC_PARTITIONS := true
+
+PRODUCT_SHIPPING_API_LEVEL := 36
+
+PRODUCT_SOONG_NAMESPACES += \
+    $(DEVICE_PATH)
