@@ -7,8 +7,6 @@ $(call inherit-product, vendor/twrp/config/common.mk)
 
 PRODUCT_USE_DYNAMIC_PARTITIONS := true
 
-PRODUCT_SHIPPING_API_LEVEL := 36
-
 PRODUCT_SOONG_NAMESPACES += \
     $(DEVICE_PATH)
 
