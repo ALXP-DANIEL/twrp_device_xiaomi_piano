@@ -71,3 +71,13 @@ TW_INCLUDE_FASTBOOTD := true
 # Debug during bring-up
 TARGET_USES_LOGD := true
 TWRP_INCLUDE_LOGCAT := true
+
+# Dedicated recovery uses the active boot-slot kernel.
+# Disable TWRP's separate kernel build task without disabling recovery.img.
+TARGET_NO_KERNEL_OVERRIDE := true
+
+# Stock piano recovery uses Android boot header v4.
+BOARD_RECOVERY_MKBOOTIMG_ARGS += --header_version 4
+
+# Initial tablet UI theme.
+TW_THEME := landscape_hdpi
