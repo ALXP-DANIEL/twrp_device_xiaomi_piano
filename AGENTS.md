@@ -23,7 +23,9 @@ Do not introduce a separate recovery kernel unless real-device evidence proves t
 
 ## Current hardware-validated baseline
 
-Current validated milestone: **Build #23** (TWRP `3.7.1_14-0`).
+Last documented image baseline: **Build #23** (TWRP `3.7.1_14-0`). Later runtime evidence completes Stage 12 in safe scope, Stage 14, and Stage 15 charging runtime proof. Permanent charging integration is still pending build/clean-boot validation; no newer image identity was supplied.
+
+Read [the current suspend/charging context](docs/suspend-charging-2026-09-11.md) first.
 
 Read [the complete Build #23 context record](docs/bringup-build23.md) before any new work. It records image identities, hardware results, failed size/crypto experiments, source-patch ownership, and the full roadmap. Build #22 adds `TW_SKIP_ADDITIONAL_FSTAB := true`; Build #23 additionally requires the separate `bootable/recovery/twrpApex.cpp` fix. The device tree alone does not reproduce that source state.
 
@@ -618,8 +620,20 @@ Do not spoof fake platform/security-patch values to force decryption.
 - Stages 8/9 FBE and PIN/password decryption: **PAUSED**.
 - Stage 10: **complete** for super detection, logical mappings, active-slot selection, EROFS read mounts, additional-fstab cleanup (#22), and APEX loop integration (#23).
 - Stage 11 backup/restore: pending.
-- **Next: Stage 12 — ADB sideload / flashing transport validation**, unless real OTG hardware is immediately available for Stage 7C. This is a planning target, not permission to flash partitions.
-- Stages 13–25: pending as itemized in [the full roadmap](docs/bringup-build23.md#current-roadmap). Documentation is synchronized here; release/full-matrix documentation is still ongoing.
+- Stage 12 ADB sideload/flashing: complete in reported safe scope; no general flashing claim.
+- Stage 13 MTP: pending, `/data` limited.
+- Stage 14 screen/suspend/power: complete, including USB-disconnected deep suspend and RTC wake.
+- Stage 15 battery/charging: complete runtime proof (CDP/PD/PD-PPS, hotplug, GUI icon); permanent bootstrap integration still needs build and clean-boot validation.
+- **Current priority:** verify the permanent ADSP bootstrap build, test clean boot without manual ADB intervention, and confirm the charging icon plus CDP/PD/PD-PPS. Then Stage 16 hardware buttons.
+- Stages 16–25 remain pending as recorded in [the current roadmap](docs/suspend-charging-2026-09-11.md#current-roadmap). Documentation synchronization does not establish release readiness.
+
+## Suspend and charging preservation
+
+Stage 14 proved full SoC deep suspend with USB physically disconnected and RTC wake: `success=1`, `fail=0`, return code 0. Connected USB/ADB can leave DWC3 busy (`a600000.dwc3`, `-16`/EBUSY at prepare). Do not disable/reset DWC3 to force that test; no platform deep-suspend bug is demonstrated.
+
+Stage 15 charging failure was traced to unavailable ADSP firmware, offline ADSP, absent RPMSG endpoints, and incomplete PMIC GLINK initialization—not missing charger modules or USB role switching. Copying ADSP firmware as real files from a read-only active modem mount into `/odm/firmware/o8`, then starting ADSP, restored charging. Symlink/direct-VFAT loader attempts failed with EACCES; the stock mount context failed with EINVAL.
+
+Preserve `/odm/firmware/o8` for Novatek. Do not globally change firmware_class.path, package ADSP firmware into recovery.img, start CDSP/SOCCP, or change USB/touch/BoardConfig for this fix. Preserve the supplied `piano-adsp-bootstrap.sh` and separate post-fs service while integration is validated. Runtime proof is not yet proof of unattended clean-boot charging. See the current record for script review observations and exact evidence.
 
 ## Builder source preservation
 

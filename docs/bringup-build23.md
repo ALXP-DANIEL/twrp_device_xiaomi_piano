@@ -1,5 +1,7 @@
 # Piano Build #23 — validated context and operator record
 
+> Historical Build #23 checkpoint. For the later completed Stage 12 safe-scope, Stage 14 suspend, Stage 15 charging runtime proof, and pending permanent ADSP integration, read [the 2026-09-11 update](suspend-charging-2026-09-11.md). The roadmap below is retained as history.
+
 Build #23 is the current known-good functional baseline, including the Build #22 device-tree fix and a separate TWRP source patch. Early bring-up remains incomplete; FBE is paused.
 
 ## Evidence scope and locations

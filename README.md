@@ -1,12 +1,14 @@
 # TWRP device tree for Xiaomi Pad 8 Pro
 
-**Early bring-up — Build #23 baseline.** TWRP boots on **piano** with working Qualcomm USB/ADB, landscape UI, and correctly mapped touchscreen input. Reboot/BCB, fastbootd entry, logical EROFS read mounts, and APEX loop integration are validated. FBE is paused; backup/restore, partition writes, and release readiness remain pending. This milestone reflects reported device testing, not a complete TWRP release.
+**Early bring-up — Build #23 image baseline with later runtime milestones.** TWRP boots on **piano** with working Qualcomm USB/ADB, landscape UI, and correctly mapped touchscreen input. Reboot/BCB, fastbootd entry, logical EROFS read mounts, and APEX loop integration are validated. FBE is paused; backup/restore, partition writes, and release readiness remain pending. This milestone reflects reported device testing, not a complete TWRP release.
 
 ## Current context and next target
 
 See [the complete Build #23 record](docs/bringup-build23.md) for Build #22/#23 image sizes and SHA-256 hashes, installed Global ROM/API/patch details, validated mappings, size experiments, source modifications, and the full roadmap. These are maintainer-reported hardware findings.
 
-**Stage 10 is complete** within its documented read-only/integration scope. **Stages 8/9 remain paused. Next: Stage 12 — ADB sideload / flashing transport validation**, or Stage 7C if real USB OTG hardware is immediately available.
+**Stages 10, 12 (safe scope), and 14 are complete. Stage 15 charging has runtime proof; permanent bootstrap integration remains under validation. Stages 8/9 remain paused.**
+
+Read [the current screen/suspend/charging update](docs/suspend-charging-2026-09-11.md). Next: verify the permanent ADSP bootstrap build, test a clean boot without manual ADB intervention, and confirm the charging icon and CDP/PD/PD-PPS. Then proceed to Stage 16 hardware buttons. No new image identity was supplied for these later tests.
 
 Build #23 requires the separate `bootable/recovery/twrpApex.cpp` fd/loop patch, saved on the builder as `~/piano-build23-apex-fd-fix.patch`. The builder also has unrelated local GUI/render changes; do not reset or commit them wholesale. A device-tree checkout alone is not a reproducible Build #23 source snapshot.
 
@@ -112,7 +114,8 @@ These are required runtime assets in the validated baseline, not disposable buil
 | Qualcomm USB initialization / ADB | Working |
 | Display / landscape UI | Working |
 | Touchscreen driver / coordinate mapping | Working |
-| Touch screen suspend/resume | Previously tested successfully |
+| Screen / panel / touch / ADB after wake / timeout | Validated — Stage 14 |
+| Deep suspend / RTC wake | Validated with USB physically disconnected |
 | SELinux | Enforcing during validated touch testing |
 | `/data` mounting / internal storage / `/data/media/0` | WIP / unvalidated |
 | Android 16 / HyperOS 3 FBE and PIN/password decryption | PAUSED — cannot mount/decrypt `/data` |
@@ -124,9 +127,19 @@ These are required runtime assets in the validated baseline, not disposable buil
 | Fastbootd partition operations | Pending |
 | Backup / restore | WIP / unvalidated |
 | MTP | WIP / unvalidated |
-| Charging / battery / brightness | WIP / unvalidated |
+| Battery / charger detection / charging / hotplug / temperature / health | Validated runtime proof — Stage 15 |
+| CDP / PD / PD-PPS / charging icon | Validated runtime proof |
+| Permanent ADSP charging bootstrap | Present; build and unattended clean-boot validation pending |
+| Brightness controls | Not separately established by this update |
+| ADB sideload / flashing transport | Validated in reported safe scope — Stage 12 |
 | Complete Android reboot / boot-chain testing | WIP / unvalidated |
 | General release readiness | Not ready |
+
+## Suspend and charging findings
+
+USB-disconnected deep suspend and RTC wake succeeded (`success=1`, `fail=0`). Connected USB/ADB can cause DWC3 prepare to return EBUSY; do not disable/reset DWC3 to force suspend.
+
+Charging requires ADSP firmware access and ADSP startup so RPMSG/PMIC GLINK can initialize. The proven manual sequence mounts the active modem partition read-only, copies only ADSP firmware as real files into `/odm/firmware/o8`, and starts ADSP. The small bootstrap script implements this approach; its automatic clean-boot behavior still requires validation. ADSP blobs must not be bundled into recovery.img. Preserve the Novatek firmware path, USB/touch configuration, and leave CDSP/SOCCP alone.
 
 ## Known limitations
 
