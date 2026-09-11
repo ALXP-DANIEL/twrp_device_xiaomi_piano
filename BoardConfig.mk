@@ -80,4 +80,28 @@ TARGET_NO_KERNEL_OVERRIDE := true
 BOARD_RECOVERY_MKBOOTIMG_ARGS += --header_version 4
 
 # Initial tablet UI theme.
+
+# Allow legacy TWRP Soong plugins required by the minimal recovery manifest
+BUILD_BROKEN_PLUGIN_VALIDATION := \
+    soong-libaosprecovery_defaults \
+    soong-libguitwrp_defaults \
+    soong-libminuitwrp_defaults \
+    soong-vold_defaults
+
+# Partition mount points
+TARGET_COPY_OUT_VENDOR := vendor
+
+
+
+# Use piano-specific Qualcomm USB ConfigFS setup
+TW_EXCLUDE_DEFAULT_USB_INIT := true
+
+# Piano display
+TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
 TW_THEME := landscape_hdpi
+
+# Piano touchscreen orientation
+
+RECOVERY_TOUCHSCREEN_SWAP_XY := true
+
+RECOVERY_TOUCHSCREEN_FLIP_Y := true

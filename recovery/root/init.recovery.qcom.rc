@@ -7,3 +7,12 @@ on property:ro.boot.usbcontroller=*
     wait /sys/bus/platform/devices/${ro.boot.usb.dwc3_msm:-a600000.ssusb}/mode
     write /sys/bus/platform/devices/${ro.boot.usb.dwc3_msm:-a600000.ssusb}/mode peripheral
     wait /sys/class/udc/${ro.boot.usbcontroller} 1
+
+on boot
+    setprop sys.usb.config adb
+
+# Xiaomi Pad 8 Pro host-touch stack
+on post-fs
+    insmod /vendor/lib/modules/xiaomi_touch.ko
+    insmod /vendor/lib/modules/nt36532_touch.ko
+    start odm.touch_report

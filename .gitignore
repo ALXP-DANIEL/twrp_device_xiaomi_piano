@@ -1,0 +1,42 @@
+# Build output and local workspaces
+/out/
+/.repo/
+/ccache/
+/.ccache/
+/build-output/
+/stock/
+/analysis/
+/dumps/
+/proprietary/
+
+# Firmware packages and images
+*.img
+*.bin
+*.zip
+*.7z
+*.tgz
+*.tar
+*.tar.gz
+
+# Local files, logs and credentials
+.DS_Store
+._*
+*.log
+*.tmp
+*.bak
+*.before-*
+*.orig
+*.rej
+*~
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+/.idea/
+/.vscode/
+
+# Required Xiaomi Pad 8 Pro touchscreen firmware packaged in recovery
+!recovery/root/odm/firmware/o8/novatek_nt36532_piano_fw_boe.bin
+!recovery/root/odm/firmware/o8/novatek_nt36532_piano_fw_csot.bin
