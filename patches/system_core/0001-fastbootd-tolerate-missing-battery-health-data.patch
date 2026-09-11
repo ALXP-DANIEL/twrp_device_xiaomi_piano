@@ -1,0 +1,51 @@
+diff --git a/fastboot/device/variables.cpp b/fastboot/device/variables.cpp
+index 078bb13..3e80efa 100644
+--- a/fastboot/device/variables.cpp
++++ b/fastboot/device/variables.cpp
+@@ -590,7 +590,9 @@ bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::strin
+     int32_t version = 0;
+     auto res = health_hal->getInterfaceVersion(&version);
+     if (!res.isOk()) {
+-        return device->WriteFail("Unable to query battery data");
++        LOG(WARNING) << "Unable to query battery health interface version; "
++                     << "reporting battery serial number as unsupported";
++        return true;
+     }
+     if (version >= 3) {
+         using aidl::android::hardware::health::BatteryHealthData;
+@@ -598,7 +600,9 @@ bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::strin
+         BatteryHealthData data;
+         auto res = health_hal->getBatteryHealthData(&data);
+         if (!res.isOk()) {
+-            return device->WriteFail("Unable to query battery data");
++            LOG(WARNING) << "Battery health data unavailable; "
++                         << "reporting battery serial number as unsupported";
++            return true;
+         }
+         if (data.batterySerialNumber) {
+             *message = *data.batterySerialNumber;
+@@ -621,17 +625,19 @@ bool GetBatteryPartStatus(FastbootDevice* device, const std::vector<std::string>
+     int32_t version = 0;
+     auto res = health_hal->getInterfaceVersion(&version);
+     if (!res.isOk()) {
+-        return device->WriteFail("Unable to query battery data");
+-    }
+-    if (version >= 3) {
++        LOG(WARNING) << "Unable to query battery health interface version; "
++                     << "reporting battery part status as unsupported";
++    } else if (version >= 3) {
+         using aidl::android::hardware::health::BatteryHealthData;
+ 
+         BatteryHealthData data;
+         auto res = health_hal->getBatteryHealthData(&data);
+         if (!res.isOk()) {
+-            return device->WriteFail("Unable to query battery data");
++            LOG(WARNING) << "Battery health data unavailable; "
++                         << "reporting battery part status as unsupported";
++        } else {
++            status = data.batteryPartStatus;
+         }
+-        status = data.batteryPartStatus;
+     }
+     switch (status) {
+         case BatteryPartStatus::UNSUPPORTED:
