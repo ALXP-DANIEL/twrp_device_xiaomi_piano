@@ -105,3 +105,6 @@ TW_THEME := landscape_hdpi
 RECOVERY_TOUCHSCREEN_SWAP_XY := true
 
 RECOVERY_TOUCHSCREEN_FLIP_Y := true
+
+# Stock vendor fstab contains a duplicate unsupported mifs /data entry.
+TW_SKIP_ADDITIONAL_FSTAB := true
