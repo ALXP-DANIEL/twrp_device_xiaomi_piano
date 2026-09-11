@@ -1,6 +1,18 @@
 # TWRP device tree for Xiaomi Pad 8 Pro
 
-**Early bring-up — Build #18 baseline.** TWRP boots on **piano** with working Qualcomm USB/ADB, landscape UI, and correctly mapped touchscreen input. Storage, FBE decryption, fastbootd, backup/restore, and release readiness remain WIP. This milestone reflects reported device testing, not a complete TWRP release.
+**Early bring-up — Build #23 baseline.** TWRP boots on **piano** with working Qualcomm USB/ADB, landscape UI, and correctly mapped touchscreen input. Reboot/BCB, fastbootd entry, logical EROFS read mounts, and APEX loop integration are validated. FBE is paused; backup/restore, partition writes, and release readiness remain pending. This milestone reflects reported device testing, not a complete TWRP release.
+
+## Current context and next target
+
+See [the complete Build #23 record](docs/bringup-build23.md) for Build #22/#23 image sizes and SHA-256 hashes, installed Global ROM/API/patch details, validated mappings, size experiments, source modifications, and the full roadmap. These are maintainer-reported hardware findings.
+
+**Stage 10 is complete** within its documented read-only/integration scope. **Stages 8/9 remain paused. Next: Stage 12 — ADB sideload / flashing transport validation**, or Stage 7C if real USB OTG hardware is immediately available.
+
+Build #23 requires the separate `bootable/recovery/twrpApex.cpp` fd/loop patch, saved on the builder as `~/piano-build23-apex-fd-fix.patch`. The builder also has unrelated local GUI/render changes; do not reset or commit them wholesale. A device-tree checkout alone is not a reproducible Build #23 source snapshot.
+
+Only `recovery_a` is experimental. Never touch `recovery_b` or switch testing to slot B. Start with healthy slot A and keep stock recovery available. Prefer recovery_a flash → full HyperOS boot → `adb reboot recovery`. Never modify boot/vendor_boot/vbmeta merely for recovery, blindly disable AVB, or erase all of misc. Any justified BCB clear is limited to its first 2 KiB; see [operator guidance](AGENTS.md).
+
+Image size matters below partition capacity: 27,844,608 bytes worked, while 29,401,088 bytes with incompressible padding failed. This supports an early-boot size-constraint hypothesis, not an official exact limit; 100 MiB capacity alone does not establish bootability.
 
 ## Device
 
@@ -21,7 +33,7 @@ Stock recovery occupies a dedicated partition on an A/B device. Its header-v4 im
 
 Current development/testing uses `recovery_a`; `recovery_b` has intentionally been left untouched. This baseline does not require introducing boot, vendor_boot, or vbmeta modifications.
 
-The ramdisk uses legacy LZ4 compression. Stock uses compressed Virtual A/B and dynamic partitions; fastbootd is a bring-up target, not a confirmed feature.
+The ramdisk uses legacy LZ4 compression. Stock uses compressed Virtual A/B and dynamic partitions; fastbootd entry is validated; fastbootd partition operations remain pending.
 
 | Partition / image property | Value |
 | --- | ---: |
@@ -55,17 +67,19 @@ Use a complete TWRP 14 source checkout with recovery `android-14` and build `and
 Run from the source checkout root:
 
 ```sh
+export ALLOW_MISSING_DEPENDENCIES=true
 source build/envsetup.sh
 export ALLOW_MISSING_DEPENDENCIES=true
 lunch twrp_piano-ap2a-eng
-m recoveryimage
+export ALLOW_MISSING_DEPENDENCIES=true
+m recoveryimage -j4
 ```
 
 These are the current bring-up commands. `ALLOW_MISSING_DEPENDENCIES` is part of the current builder invocation and does not establish dependency completeness. Review build errors and output before testing. The expected artifact is `out/target/product/piano/recovery.img`; do not commit it.
 
-## Build #18 working baseline
+## Current baseline and frozen Build #18 display/input milestone
 
-The synced Build #18 runtime configuration is the known-working baseline. Device testing confirms boot, Qualcomm recovery USB initialization and ADB, landscape GUI rendering, the touchscreen driver stack, and correct coordinate mapping. Touch has previously survived screen suspend/resume testing. Validated touch testing ran with **SELinux Enforcing**; this does not establish validation of every recovery operation.
+Build #23 is the current known-good functional baseline. Build #18 established the frozen display/input/USB configuration. Device testing confirms boot, Qualcomm recovery USB initialization and ADB, landscape GUI rendering, the touchscreen driver stack, and correct coordinate mapping. Touch has previously survived screen suspend/resume testing. Validated touch testing ran with **SELinux Enforcing**; this does not establish validation of every recovery operation.
 
 ### Display and input configuration
 
@@ -93,7 +107,7 @@ These are required runtime assets in the validated baseline, not disposable buil
 
 | Feature | Status |
 | --- | --- |
-| Device tree | Early bring-up — Build #18 baseline |
+| Device tree | Early bring-up — Build #23 baseline |
 | Recovery build and boot | Working in validated milestone |
 | Qualcomm USB initialization / ADB | Working |
 | Display / landscape UI | Working |
@@ -101,9 +115,13 @@ These are required runtime assets in the validated baseline, not disposable buil
 | Touch screen suspend/resume | Previously tested successfully |
 | SELinux | Enforcing during validated touch testing |
 | `/data` mounting / internal storage / `/data/media/0` | WIP / unvalidated |
-| Android 16 / HyperOS 3 FBE and PIN/password decryption | WIP / unvalidated |
-| Full recovery.fstab validation | WIP / unvalidated |
-| Fastbootd / dynamic-partition operations | WIP / unvalidated |
+| Android 16 / HyperOS 3 FBE and PIN/password decryption | PAUSED — cannot mount/decrypt `/data` |
+| Physical paths / OTG false-match correction | Validated — Builds #20/#21; real OTG pending |
+| Logical mappings / EROFS read mounts | Validated — Stage 10 |
+| Additional vendor fstab suppression | Validated — Build #22 |
+| APEX loop integration | Validated — Build #23 TWRP source patch |
+| Reboot / BCB / fastbootd entry | Validated — Build #19 |
+| Fastbootd partition operations | Pending |
 | Backup / restore | WIP / unvalidated |
 | MTP | WIP / unvalidated |
 | Charging / battery / brightness | WIP / unvalidated |
@@ -112,7 +130,7 @@ These are required runtime assets in the validated baseline, not disposable buil
 
 ## Known limitations
 
-Boot, USB/ADB, landscape display, and touch are established for the current milestone. Storage access and decryption are not established: do not assume `/data`, internal storage, or `/data/media/0` is accessible. Recovery fstab coverage, fastbootd, dynamic-partition operations, and backup/restore still require validation. Runtime behavior depends on the stock boot environment and matching drivers. No GitHub Actions builder is included.
+Boot, USB/ADB, landscape display, and touch are established for the current milestone. Storage access and decryption are not established: do not assume `/data`, internal storage, or `/data/media/0` is accessible. Real USB OTG, destructive dynamic-partition operations, and backup/restore still require validation. Read-only logical mounts and fastbootd entry are established. Runtime behavior depends on the stock boot environment and matching drivers. No GitHub Actions builder is included.
 
 CN and Global devices must retain region-matched stock firmware and kernel/module tuples. Global users must not flash CN firmware to use this tree. Cross-region compatibility has not been proven.
 

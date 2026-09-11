@@ -16,3 +16,15 @@ on post-fs
     insmod /vendor/lib/modules/xiaomi_touch.ko
     insmod /vendor/lib/modules/nt36532_touch.ko
     start odm.touch_report
+
+# Xiaomi piano ADSP bootstrap for recovery charging
+service piano_adsp_bootstrap /system/bin/sh /system/bin/piano-adsp-bootstrap.sh
+    class core
+    user root
+    group root
+    disabled
+    oneshot
+    seclabel u:r:recovery:s0
+
+on post-fs
+    start piano_adsp_bootstrap

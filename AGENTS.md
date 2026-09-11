@@ -23,7 +23,11 @@ Do not introduce a separate recovery kernel unless real-device evidence proves t
 
 ## Current hardware-validated baseline
 
-Current validated milestone: **Build #19**.
+Current validated milestone: **Build #23** (TWRP `3.7.1_14-0`).
+
+Read [the complete Build #23 context record](docs/bringup-build23.md) before any new work. It records image identities, hardware results, failed size/crypto experiments, source-patch ownership, and the full roadmap. Build #22 adds `TW_SKIP_ADDITIONAL_FSTAB := true`; Build #23 additionally requires the separate `bootable/recovery/twrpApex.cpp` fix. The device tree alone does not reproduce that source state.
+
+Historical Build #19 reboot/BCB commit:
 
 ```text
 3fd2897 piano: fix misc path for reboot handling
@@ -41,10 +45,12 @@ Confirmed on real hardware:
 - `TWRP -> Reboot -> System` works.
 - Android `adb reboot recovery` reaches normal TWRP.
 - `TWRP -> Reboot -> Bootloader` reaches bootloader fastboot.
-- Bootloader `fastboot reboot recovery` reaches normal TWRP.
+- Build #19 previously validated direct `fastboot reboot recovery`; current preferred testing boots HyperOS fully before `adb reboot recovery`. Do not rely on the earlier direct path.
 - `TWRP -> Reboot -> Fastboot` reaches TWRP fastbootd.
 - In fastbootd, `fastboot getvar is-userspace` returns `yes`.
 - `/misc` works at `/dev/block/by-name/misc`; BCB/reboot handling is functional.
+
+Stage 10 is complete for super detection, active-slot logical mapping, read-only EROFS mounts, Build #22 additional-fstab cleanup, and Build #23 APEX loop integration. Fastbootd partition writes remain pending.
 
 Future changes must not regress these features.
 
@@ -129,7 +135,11 @@ Do not replace the custom recovery USB init with TWRP's default USB init while w
 
 ## Mandatory hardware safety rules
 
-Unless the user explicitly decides otherwise after evidence is collected:
+Only `recovery_a` is experimental. Start from healthy slot A; NEVER test slot B, touch `recovery_b`, blindly disable AVB, or modify boot/vendor_boot/vbmeta merely to make recovery work. NEVER erase all of misc; if BCB clearing is justified, only its first 2 KiB may be cleared. Keep stock recovery ready for immediate fallback.
+
+Known healthy state: `current-slot: a`, `slot-successful:a: yes`, `slot-unbootable:a: no`, `slot-retry-count:a: 6`.
+
+Mandatory rules:
 
 1. Experimental recovery flashes go to `recovery_a` only.
 2. Keep `recovery_b` untouched as fallback.
@@ -138,7 +148,7 @@ Unless the user explicitly decides otherwise after evidence is collected:
 5. Do not switch active slots as a troubleshooting shortcut.
 6. Do not wipe, format, or resize `/data`, `/metadata`, `super`, or logical partitions during diagnostics.
 7. Do not perform destructive fastbootd operations until the relevant partition layout is validated read-only.
-8. Do not zero `/misc` before capturing evidence when debugging reboot behavior.
+8. Never erase all of `/misc`; capture evidence first and restrict any justified BCB clear to 2048 bytes.
 9. Donor trees are references, not sources of truth. Do not wholesale-copy one.
 10. Keep CN and Global stock firmware/kernel/module combinations region-matched.
 11. Preserve a known-good image/source checkpoint before risky experiments.
@@ -228,9 +238,11 @@ Build:
 
 ```sh
 cd ~/android/twrp-14
+export ALLOW_MISSING_DEPENDENCIES=true
 source build/envsetup.sh
 export ALLOW_MISSING_DEPENDENCIES=true
 lunch twrp_piano-ap2a-eng
+export ALLOW_MISSING_DEPENDENCIES=true
 m recoveryimage -j4
 ```
 
@@ -292,7 +304,9 @@ Flash only `recovery_a`:
 ```sh
 IMG="/path/to/test-recovery.img"
 fastboot flash recovery_a "$IMG"
-fastboot reboot recovery
+fastboot reboot
+# Wait for HyperOS to boot fully, then:
+adb reboot recovery
 ```
 
 Never add `recovery_b` to an experimental flash command.
@@ -556,9 +570,12 @@ m recoveryimage -j4
 If recovery packaging fails because old directories conflict with new symlinks:
 
 ```sh
+rm -f out/target/product/piano/recovery.img
 rm -rf \
+  out/target/product/piano/root \
   out/target/product/piano/recovery \
   out/target/product/piano/obj/PACKAGING/recovery_intermediates
+mkdir -p out/target/product/piano/recovery/root/system/etc
 
 m recoveryimage -j4
 ```
@@ -567,7 +584,7 @@ Avoid wiping all `out/soong` or doing a full clean unless evidence requires it.
 
 ## Storage/FBE rules
 
-Android 16 / HyperOS 3 storage decryption is not yet validated.
+Stages 8/9 are explicitly PAUSED. Current TWRP cannot mount/decrypt `/data`. Do not enable `TW_INCLUDE_CRYPTO`, `TW_INCLUDE_CRYPTO_FBE`, `TW_INCLUDE_FBE_METADATA_DECRYPT`, `BOARD_USES_QCOM_FBE_DECRYPTION`, `qcom_decrypt`, or `qcom_decrypt_fbe` until explicitly returning to Stage 8.
 
 The current fstab contains researched F2FS/FBE flags; their presence does not prove TWRP can decrypt or safely mount user data.
 
@@ -596,38 +613,17 @@ Do not spoof fake platform/security-patch values to force decryption.
 
 ## Current roadmap
 
-Completed/validated:
+- Stages 1–6: validated (boot, GUI, USB/ADB, touch, mapping, reboot/BCB/fastbootd entry).
+- Stage 7A physical paths and 7B OTG false-match correction: complete. Stage 7C real USB OTG: pending.
+- Stages 8/9 FBE and PIN/password decryption: **PAUSED**.
+- Stage 10: **complete** for super detection, logical mappings, active-slot selection, EROFS read mounts, additional-fstab cleanup (#22), and APEX loop integration (#23).
+- Stage 11 backup/restore: pending.
+- **Next: Stage 12 — ADB sideload / flashing transport validation**, unless real OTG hardware is immediately available for Stage 7C. This is a planning target, not permission to flash partitions.
+- Stages 13–25: pending as itemized in [the full roadmap](docs/bringup-build23.md#current-roadmap). Documentation is synchronized here; release/full-matrix documentation is still ongoing.
 
-1. Recovery boot
-2. GUI/framebuffer
-3. USB/ADB
-4. Touch hardware stack
-5. Landscape UI and exact touch mapping
-6. Reboot/BCB handling and fastbootd entry
+## Builder source preservation
 
-Next:
-
-7. Partition/fstab/storage audit
-8. Android 16 / HyperOS 3 FBE mapping
-9. `/data` PIN/password decryption and `/data/media/0`
-10. Dynamic-partition validation
-11. Backup/restore
-12. ADB sideload/flashing workflows
-13. MTP
-14. Screen/suspend/power behavior
-15. Battery/charging
-16. Hardware buttons
-17. Remaining reboot/boot-chain behavior
-18. Fastbootd partition operations
-19. SELinux cleanup
-20. Device-tree cleanup
-21. Reproducible clean build
-22. Full hardware test matrix
-23. Stock-recovery/fallback safety validation
-24. Documentation
-25. Release maturity
-
-Do not jump to FBE/decryption before physical/logical partition paths and storage fstab are trustworthy.
+`bootable/recovery` is dirty: pre-existing modifications in `gui/gui.cpp`, `gui/pages.cpp`, and `twrp-functions.cpp`, plus three GUI debug backups, must not be blindly reset or bundled into a commit. Build #23 modifies `twrpApex.cpp`; its separate patch is `~/piano-build23-apex-fd-fix.patch`. See the context record for exact backup names and fd/loop fix details. No unrelated community APEX changes, compressed-APEX substitutions, or crypto flags are justified by this milestone.
 
 ## How to guide the user
 
