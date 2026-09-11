@@ -10,3 +10,7 @@ PRODUCT_MANUFACTURER := Xiaomi
 
 PRODUCT_RELEASE_NAME := piano
 TARGET_OTA_ASSERT_DEVICE := piano
+
+# Boot control HAL for fastbootd A/B slot handling
+PRODUCT_PACKAGES += \
+    android.hardware.boot@1.2-impl.recovery
