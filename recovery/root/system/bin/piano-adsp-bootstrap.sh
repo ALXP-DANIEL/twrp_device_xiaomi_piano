@@ -23,6 +23,44 @@ find_adsp_remoteproc()
     return 1
 }
 
+copy_firmware()
+{
+    src="$1"
+    dst="$2"
+    name="${src##*/}"
+
+    # Do not overwrite firmware already supplied by recovery.
+    [ -e "$dst" ] && return 0
+
+    attempt=1
+
+    while [ "$attempt" -le 5 ]; do
+        rm -f "$dst"
+
+        if cp "$src" "$dst" 2>/dev/null; then
+            chmod 0644 "$dst"
+
+            # Verify destination exists and has the same byte count.
+            src_size="$(wc -c < "$src" 2>/dev/null)"
+            dst_size="$(wc -c < "$dst" 2>/dev/null)"
+
+            if [ -n "$src_size" ] &&
+               [ "$src_size" = "$dst_size" ]; then
+                return 0
+            fi
+        fi
+
+        log "copy retry $attempt for $name"
+
+        rm -f "$dst"
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+
+    log "failed copying $name after retries"
+    return 1
+}
+
 log "bootstrap starting"
 
 #
@@ -49,9 +87,6 @@ STATE="$(cat "$RPROC/state" 2>/dev/null)"
 
 log "remoteproc=$RPROC state=$STATE"
 
-#
-# Nothing to do if ADSP is already running.
-#
 if [ "$STATE" = "running" ]; then
     log "ADSP already running"
     exit 0
@@ -75,7 +110,7 @@ MODEM="/dev/block/by-name/modem${SLOT_SUFFIX}"
 log "slot=$SLOT_SUFFIX modem=$MODEM"
 
 #
-# Wait briefly for the block device.
+# Wait for modem block device.
 #
 i=0
 
@@ -91,17 +126,16 @@ if [ ! -b "$MODEM" ]; then
     exit 1
 fi
 
-if [ ! -d "$FW_DST" ]; then
+[ -d "$FW_DST" ] || {
     log "firmware destination missing: $FW_DST"
     exit 1
-fi
+}
 
 mkdir -p "$MODEM_MNT"
-
 umount "$MODEM_MNT" 2>/dev/null
 
 #
-# Read-only. Never write to modem partition.
+# Read-only: never write to modem partition.
 #
 if ! mount -t vfat -o ro "$MODEM" "$MODEM_MNT"; then
     log "failed to mount $MODEM"
@@ -119,6 +153,7 @@ fi
 log "copying ADSP firmware"
 
 COPIED=0
+FAILED=0
 
 for f in \
     "$SRC"/adsp.mdt \
@@ -129,37 +164,35 @@ do
     [ -f "$f" ] || continue
 
     name="${f##*/}"
-    dst="$FW_DST/$name"
 
-    #
-    # Never overwrite firmware already supplied by recovery.
-    #
-    if [ -e "$dst" ]; then
+    if [ -e "$FW_DST/$name" ]; then
         continue
     fi
 
-    if cp "$f" "$dst"; then
-        chmod 0644 "$dst"
+    if copy_firmware "$f" "$FW_DST/$name"; then
         COPIED=$((COPIED + 1))
     else
-        log "failed copying $name"
+        FAILED=$((FAILED + 1))
     fi
 done
 
-log "copied $COPIED firmware files"
+log "copied $COPIED firmware files, failed $FAILED"
 
 #
-# Ensure the main firmware image is now available.
+# Do not attempt to boot an incomplete firmware set.
 #
-if [ ! -f "$FW_DST/adsp.mdt" ]; then
-    log "ADSP firmware unavailable after copy"
+if [ "$FAILED" -ne 0 ]; then
+    log "firmware copy incomplete; refusing to start ADSP"
     umount "$MODEM_MNT" 2>/dev/null
     exit 1
 fi
 
-#
-# Start ADSP.
-#
+if [ ! -f "$FW_DST/adsp.mdt" ]; then
+    log "adsp.mdt unavailable after copy"
+    umount "$MODEM_MNT" 2>/dev/null
+    exit 1
+fi
+
 log "starting ADSP"
 
 if ! echo start > "$RPROC/state"; then
@@ -169,7 +202,7 @@ if ! echo start > "$RPROC/state"; then
 fi
 
 #
-# Wait up to ~5 seconds for running state.
+# Wait up to ~5 seconds.
 #
 i=0
 
@@ -182,10 +215,6 @@ while [ "$i" -lt 50 ]; do
     sleep 0.1
 done
 
-#
-# Firmware has already been copied to recovery RAM.
-# The stock partition no longer needs to stay mounted.
-#
 umount "$MODEM_MNT" 2>/dev/null
 
 if [ "$STATE" = "running" ]; then
