@@ -2,6 +2,11 @@ on init
     write /sys/class/backlight/panel0-backlight/brightness 200
     setprop sys.usb.configfs 1
     setprop vendor.piano.qsee.mount_attempted 0
+    # Stock vendor build.prop selects the TZ-backed secure services over
+    # SPU with this value. KeyMint and Gatekeeper both read it at startup.
+    setprop vendor.gatekeeper.is_security_level_spu 0
+    # Stock vendor build.prop value; used by the KeyMint startup retry loop.
+    setprop vendor.keymint.retry_timer 5
 
 on property:ro.boot.usbcontroller=*
     setprop sys.usb.controller ${ro.boot.usbcontroller}
@@ -17,6 +22,7 @@ on boot
 # Ramdisk files are initially rootfs-labeled. Apply the existing Android
 # file_contexts narrowly instead of granting tee access to rootfs.
 on early-fs
+    restorecon /system/etc/task_profiles.json
     restorecon /system/bin
     restorecon /system/bin/linker64
     restorecon /system/etc/ld.config.txt
@@ -26,8 +32,20 @@ on early-fs
     restorecon /system/lib64/libdl.so
     restorecon /system/lib64/ld-android.so
     restorecon /system/lib64/libdl_android.so
+    restorecon /system/lib64/libnetd_client.so
+    restorecon /system/lib64/libbinder.so
+    restorecon /system/lib64/libbinder_ndk.so
     restorecon_recursive /vendor/piano-stock-qsee-system
+
+    # The binder wire protocol must match the running servicemanager, which
+    # is TWRP's Android 14 build. Stock Android 16 binder libraries link but
+    # every AServiceManager_addService() fails against it, so the recovery's
+    # own pair is placed ahead of the stock vendor copies.
+    symlink /system/lib64/libbinder.so /vendor/piano-stock-qsee-system/lib64/libbinder.so
+    symlink /system/lib64/libbinder_ndk.so /vendor/piano-stock-qsee-system/lib64/libbinder_ndk.so
+
     restorecon /vendor/bin/piano-qseecomd
+    restorecon /vendor/bin/hw/piano-keymint
 
 # Xiaomi Pad 8 Pro host-touch stack
 on post-fs
@@ -73,4 +91,17 @@ service vendor.qseecomd /vendor/bin/piano-qseecomd
     socket notify-topology stream 0660 system drmrpc
     disabled
     oneshot
+    setenv LD_LIBRARY_PATH /vendor/piano-stock-qsee-system/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+# Stock piano KeyMint HAL
+#
+# One process hosts IKeyMintDevice, IRemotelyProvisionedComponent,
+# ISecureClock and ISharedSecret. It needs the stock vendor mount and a
+# running qseecomd, so it stays disabled and is started manually during
+# bring-up with: setprop ctl.start vendor.keymint
+service vendor.keymint /vendor/bin/hw/piano-keymint
+    class hal
+    user system
+    group system drmrpc
+    disabled
     setenv LD_LIBRARY_PATH /vendor/piano-stock-qsee-system/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64

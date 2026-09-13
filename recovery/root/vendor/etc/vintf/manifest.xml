@@ -1,0 +1,29 @@
+<!--
+    Recovery device VINTF manifest.
+
+    TWRP ships no VINTF manifest at all, so servicemanager reports
+    "NULL VINTF MANIFEST!" and refuses to publish AIDL HAL interfaces.
+    Only the secure services this recovery actually runs are declared
+    here; the declarations mirror the stock fragment at
+    vendor/etc/vintf/manifest/android.hardware.security.keymint-service-qti.xml
+-->
+<manifest version="1.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IKeyMintDevice/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IRemotelyProvisionedComponent/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.secureclock</name>
+        <fqname>ISecureClock/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.sharedsecret</name>
+        <fqname>ISharedSecret/default</fqname>
+    </hal>
+</manifest>

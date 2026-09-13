@@ -1,0 +1,41 @@
+# Stock QTI KeyMint runs in the AOSP hal_keymint_default domain. The AOSP
+# rules already cover binder, servicemanager registration and the four
+# service labels (keymint, rkp, secureclock, sharedsecret), so no new
+# domain is introduced. Only the Qualcomm secure-world access below is
+# added, using the dedicated device types already defined for QSEE.
+
+# KeyMint polls vendor.sys.listeners.registered and waits in a retry loop
+# until qseecomd has registered its TZ listener services. Without read
+# access it spins in that loop forever.
+get_prop(hal_keymint_default, vendor_tee_listener_prop)
+
+# TWRP runs servicemanager inside the recovery domain rather than a
+# dedicated servicemanager domain, so the AOSP hal -> servicemanager
+# binder rule never matches. Without this the AIDL addService() call is
+# refused and no interface is ever published.
+allow hal_keymint_default recovery:binder { call transfer };
+allow recovery hal_keymint_default:binder { call transfer };
+
+# Stock sets vendor.gatekeeper.is_security_level_spu=0 in vendor build.prop
+# to select the TZ-backed implementation over SPU. KeyMint reads it during
+# startup; recovery sets the same value from init.
+get_prop(hal_keymint_default, vendor_piano_spu_level_prop)
+
+# Retry interval used by the startup loop before the AIDL interfaces are
+# published. Stock value is 5.
+get_prop(hal_keymint_default, vendor_keymint_retry_timer_prop)
+
+# libQSEEComAPI / libminkdescriptor open the SMC invoke node directly.
+allow hal_keymint_default tee_device:chr_file { ioctl read write getattr lock map open };
+
+# QSEE DMA heap used for secure buffer allocation.
+allow hal_keymint_default vendor_dmabuf_qseecom_heap_device:chr_file {
+    ioctl
+    read
+    getattr
+    lock
+    map
+    open
+    watch
+    watch_reads
+};

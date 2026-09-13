@@ -17,5 +17,10 @@
 # Stock qseecomd packaged for recovery
 /vendor/bin/piano-qseecomd    u:object_r:tee_exec:s0
 
+# Stock KeyMint HAL packaged for recovery. The AOSP default KeyMint exec
+# type is reused so init performs the standard domain transition into
+# hal_keymint_default, whose rules and service labels already exist.
+/vendor/bin/hw/piano-keymint    u:object_r:hal_keymint_default_exec:s0
+
 # Qualcomm QSEE DMA heap — stock piano label
 /dev/dma_heap/qcom,qseecom    u:object_r:vendor_dmabuf_qseecom_heap_device:s0
