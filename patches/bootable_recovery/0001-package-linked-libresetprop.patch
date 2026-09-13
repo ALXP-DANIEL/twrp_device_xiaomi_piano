@@ -1,0 +1,14 @@
+diff --git a/prebuilt/Android.mk b/prebuilt/Android.mk
+--- a/prebuilt/Android.mk
++++ b/prebuilt/Android.mk
+@@ -164,6 +164,10 @@
+     TW_NO_EXFAT_FUSE := true
+ endif
+ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libhardware.so
++# Match recovery linkage when property support is enabled (including FBE).
++ifneq ($(TW_INCLUDE_LIBRESETPROP),)
++    RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libresetprop.so
++endif
+ ifeq ($(TW_INCLUDE_CRYPTO), true)
+     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libcryptfsfde.so
+     RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libdexfile_support.so

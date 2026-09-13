@@ -1,0 +1,153 @@
+diff --git a/system/vold/Android.bp b/system/vold/Android.bp
+index fa26d47..061d0b1 100644
+--- a/system/vold/Android.bp
++++ b/system/vold/Android.bp
+@@ -182,6 +182,7 @@ cc_library_static {
+         "android.hardware.health.storage-V1-ndk",
+         "android.hardware.keymaster@4.1",
+         "android.hardware.security.keymint-V3-ndk",
++        "android.hardware.weaver-V2-ndk",
+         "android.hardware.weaver@1.0",
+         "android.security.apc-ndk",
+         "android.system.keystore2-V4-ndk",
+diff --git a/system/vold/Weaver1.cpp b/system/vold/Weaver1.cpp
+index ea357ed..317196c 100644
+--- a/system/vold/Weaver1.cpp
++++ b/system/vold/Weaver1.cpp
+@@ -28,7 +28,12 @@
+ //#include <keystore/authorization_set.h>
+ //#include <keystore/keystore_hidl_support.h>
+ 
++#include <aidl/android/hardware/weaver/IWeaver.h>
++#include <aidl/android/hardware/weaver/WeaverConfig.h>
++#include <cstring>
+ #include <android/hardware/weaver/1.0/IWeaver.h>
++#include <android/binder_manager.h>
++#include <aidl/android/hardware/weaver/WeaverReadStatus.h>
+ 
+ #include <iostream>
+ #define ERROR 1
+@@ -48,13 +53,31 @@ namespace android {
+ namespace vold {
+ 
+ Weaver::Weaver() {
+-	mDevice = ::android::hardware::weaver::V1_0::IWeaver::getService();
++	constexpr const char kAidlWeaverService[] = "android.hardware.weaver.IWeaver/default";
++	::ndk::SpAIBinder binder(AServiceManager_checkService(kAidlWeaverService));
++	mAidlDevice = aidl_weaver::IWeaver::fromBinder(binder);
++	if (!mAidlDevice) {
++		mDevice = ::android::hardware::weaver::V1_0::IWeaver::getService();
++	}
+ 	GottenConfig = false;
+ }
+ 
+ bool Weaver::GetConfig() {
++	if (!*this)
++		return false;
+ 	if (GottenConfig)
+ 		return true;
++	if (mAidlDevice) {
++		aidl_weaver::WeaverConfig aidl_config;
++		auto ret = mAidlDevice->getConfig(&aidl_config);
++		if (!ret.isOk() || aidl_config.slots <= 0 || aidl_config.keySize <= 0 ||
++				aidl_config.valueSize <= 0) return false;
++		config.slots = static_cast<uint32_t>(aidl_config.slots);
++		config.keySize = static_cast<uint32_t>(aidl_config.keySize);
++		config.valueSize = static_cast<uint32_t>(aidl_config.valueSize);
++		GottenConfig = true;
++		return true;
++	}
+ 
+ 	WeaverStatus status;
+ 	WeaverConfig cfg;
+@@ -96,6 +119,18 @@ bool Weaver::GetValueSize(uint32_t* valueSize) {
+ 
+ // TODO: we should return more information about the status including time delays before the next retry
+ bool Weaver::WeaverVerify(const uint32_t slot, const void* weaver_key, std::vector<uint8_t>* payload) {
++	if (!payload || !weaver_key || !GetConfig() || slot >= config.slots)
++		return false;
++	if (mAidlDevice) {
++		std::vector<uint8_t> key(config.keySize);
++		memcpy(key.data(), weaver_key, key.size());
++		aidl_weaver::WeaverReadResponse response;
++		auto ret = mAidlDevice->read(static_cast<int32_t>(slot), key, &response);
++		if (!ret.isOk() || response.status != aidl_weaver::WeaverReadStatus::OK ||
++				response.timeout != 0) return false;
++		*payload = std::move(response.value);
++		return true;
++	}
+ 	bool callbackCalled = false;
+ 	WeaverReadStatus status;
+ 	std::vector<uint8_t> readValue;
+diff --git a/system/vold/Weaver1.h b/system/vold/Weaver1.h
+index 22f401e..f100bef 100644
+--- a/system/vold/Weaver1.h
++++ b/system/vold/Weaver1.h
+@@ -27,12 +27,14 @@
+ #include <memory>
+ #include <string>
+ #include <utility>
++namespace aidl::android::hardware::weaver { class IWeaver; }
+ 
+ #include <android/hardware/weaver/1.0/IWeaver.h>
+ #include "Utils.h"
+ 
+ namespace android {
+ namespace vold {
++namespace aidl_weaver = ::aidl::android::hardware::weaver;
+ using ::android::hardware::weaver::V1_0::IWeaver;
+ 
+ // Wrapper for a Weaver device
+@@ -40,7 +42,7 @@ class Weaver {
+ 	public:
+ 		Weaver();
+ 		// false if we failed to open the weaver device.
+-		explicit operator bool() { return mDevice.get() != nullptr; }
++		explicit operator bool() { return mAidlDevice != nullptr || mDevice.get() != nullptr; }
+ 
+ 		bool GetSlots(uint32_t* slots);
+ 		bool GetKeySize(uint32_t* keySize);
+@@ -49,6 +51,7 @@ class Weaver {
+ 		bool WeaverVerify(const uint32_t slot, const void* weaver_key, std::vector<uint8_t>* payload);
+ 
+ 	private:
++		std::shared_ptr<aidl_weaver::IWeaver> mAidlDevice;
+ 		sp<hardware::weaver::V1_0::IWeaver> mDevice;
+ 		hardware::weaver::V1_0::WeaverConfig config;
+ 		bool GottenConfig;
+diff --git a/bootable/recovery/prebuilt/Android.mk b/bootable/recovery/prebuilt/Android.mk
+--- a/bootable/recovery/prebuilt/Android.mk
++++ b/bootable/recovery/prebuilt/Android.mk
+@@ -253,6 +253,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
+         ifneq ($(wildcard hardware/interfaces/weaver/1.0/Android.bp),)
+             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.weaver@1.0.so
+         endif
++        RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.weaver-V2-ndk.so
+         ifneq ($(wildcard hardware/interfaces/confirmationui/1.0/Android.bp),)
+             RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/android.hardware.confirmationui@1.0.so
+         endif
+diff --git a/bootable/recovery/Android.mk b/bootable/recovery/Android.mk
+index 4cac681..2761956 100755
+--- a/bootable/recovery/Android.mk
++++ b/bootable/recovery/Android.mk
+@@ -350,6 +350,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
+         android.hardware.gatekeeper-V1-ndk \
+         android.hardware.gatekeeper@1.0 \
+         android.hardware.weaver@1.0 \
++        android.hardware.weaver-V2-ndk \
+         android.frameworks.stats@1.0 \
+         android.security.maintenance-ndk \
+         android.system.keystore2-V4-ndk \
+diff --git a/bootable/recovery/libtar/Android.mk b/bootable/recovery/libtar/Android.mk
+index b86e246..5397121 100755
+--- a/bootable/recovery/libtar/Android.mk
++++ b/bootable/recovery/libtar/Android.mk
+@@ -26,6 +26,7 @@ ifeq ($(TW_INCLUDE_CRYPTO_FBE), true)
+         android.hardware.keymaster@4.0 \
+         android.hardware.keymaster@4.1 \
+         android.hardware.weaver@1.0 \
++        android.hardware.weaver-V2-ndk \
+         android.security.apc-ndk \
+         android.system.keystore2-V4-ndk \
+         android.security.authorization-ndk \
+ 

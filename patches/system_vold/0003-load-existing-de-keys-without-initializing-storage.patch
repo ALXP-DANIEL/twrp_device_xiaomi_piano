@@ -1,0 +1,96 @@
+diff --git a/FsCrypt.cpp b/FsCrypt.cpp
+--- a/FsCrypt.cpp
++++ b/FsCrypt.cpp
+@@ -488,7 +488,7 @@
+     return true;
+ }
+ 
+-bool fscrypt_initialize_systemwide_keys() {
++bool fscrypt_initialize_systemwide_keys(bool existing_keys_only) {
+     LOG(INFO) << "fscrypt_initialize_systemwide_keys";
+ 
+     if (!init_data_file_encryption_options()) return false;
+@@ -499,13 +499,13 @@
+     KeyBuffer device_key;
+ install:
+     if (!retrieveOrGenerateKey(device_key_path, device_key_temp, kEmptyAuthentication,
+-                               makeGen(s_data_options), &device_key))
++                               existing_keys_only ? android::vold::neverGen() : makeGen(s_data_options), &device_key))
+         return false;
+ 
+     // This initializes s_device_policy, which is a global variable so that
+     // fscrypt_init_user0() can access it later.
+     if (!install_storage_key(DATA_MNT_POINT, s_data_options, device_key, &s_device_policy)) {
+-        if (retry) {
++        if (retry && !existing_keys_only) {
+             printf("Trying %s wrappedkey\n", options.use_hw_wrapped_key ? "without" : "with");
+             GetEntryForMountPoint(&fstab_default, DATA_MNT_POINT)->fs_mgr_flags.wrapped_key =
+                 options.use_hw_wrapped_key = !options.use_hw_wrapped_key;
+@@ -513,6 +513,13 @@
+             goto install;
+         }
+         return false;
++    }
++
++    // Recovery loads the existing policy without rewriting stock references
++    // or generating a per-boot key for Android directory initialization.
++    if (existing_keys_only) {
++        de_key_raw_ref = s_device_policy.key_raw_ref;
++        return true;
+     }
+ 
+     std::string options_string;
+@@ -598,8 +605,19 @@
+ 
+ bool fscrypt_init_user0_done;
+ 
+-bool fscrypt_init_user0() {
++bool fscrypt_init_user0(bool existing_keys_only) {
+     LOG(INFO) << "fscrypt_init_user0";
++
++    if (existing_keys_only) {
++        // Do not create keys, directories, policies, or unlock CE in recovery.
++        if (!IsFbeEnabled() || !de_key_exists(0) || !ce_key_exists(0)) {
++            LOG(ERROR) << "Recovery requires existing user 0 DE and CE keys";
++            return false;
++        }
++        if (!load_all_de_keys() || s_de_policies.count(0) == 0) return false;
++        fscrypt_init_user0_done = true;
++        return true;
++    }
+ 
+     if (IsFbeEnabled()) {
+         if (!prepare_dir(user_key_dir, 0700, AID_ROOT, AID_ROOT)) return false;
+diff --git a/FsCrypt.h b/FsCrypt.h
+--- a/FsCrypt.h
++++ b/FsCrypt.h
+@@ -22,9 +22,10 @@
+ #include <fscrypt-common.h>
+ using namespace android::fscrypt;
+ 
+-bool fscrypt_initialize_systemwide_keys();
++// Existing-only mode installs keys in memory without initializing stock storage.
++bool fscrypt_initialize_systemwide_keys(bool existing_keys_only = false);
+ 
+-bool fscrypt_init_user0();
++bool fscrypt_init_user0(bool existing_keys_only = false);
+ extern bool fscrypt_init_user0_done;
+ bool fscrypt_create_user_keys(userid_t user_id, bool ephemeral);
+ bool fscrypt_destroy_user_keys(userid_t user_id);
+diff --git a/Decrypt.cpp b/Decrypt.cpp
+--- a/Decrypt.cpp
++++ b/Decrypt.cpp
+@@ -231,11 +231,11 @@
+ 
+ extern "C" bool Decrypt_DE() {
+ 	printf("Attempting to initialize DE keys\n");
+-	if (!fscrypt_initialize_systemwide_keys()) { // this deals with the overarching device encryption
++	if (!fscrypt_initialize_systemwide_keys(true)) { // this deals with the overarching device encryption
+ 		printf("fscrypt_initialize_systemwide_keys returned fail\n");
+ 		return false;
+ 	}
+-	if (!fscrypt_init_user0()) {
++	if (!fscrypt_init_user0(true)) {
+ 		printf("fscrypt_init_user0 returned fail\n");
+ 		return false;
+ 	}

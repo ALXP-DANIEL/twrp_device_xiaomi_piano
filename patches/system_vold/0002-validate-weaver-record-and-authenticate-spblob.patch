@@ -1,0 +1,128 @@
+diff --git a/Decrypt.cpp b/Decrypt.cpp
+--- a/Decrypt.cpp
++++ b/Decrypt.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include "Decrypt.h"
++#include <climits>
+ #include "FsCrypt.h"
+ #include <fscrypt/fscrypt.h>
+ 
+@@ -34,6 +35,7 @@
+ #include <openssl/sha.h>
+ #include <openssl/aes.h>
+ #include <openssl/evp.h>
++#include <openssl/crypto.h>
+ #include <openssl/rand.h>
+ 
+ #include <dirent.h>
+@@ -408,13 +410,21 @@
+ 		return false;
+ 	}
+ 	// output_hex(weaver_data.data(), weaver_data.size());printf("\n");
+-	const unsigned char* byteptr = (const unsigned char*)weaver_data.data();
+-	wd->version = *byteptr;
+-	// printf("weaver version %i\n", wd->version);
+-	const int* intptr = (const int*)weaver_data.data() + sizeof(unsigned char);
+-	wd->slot = *intptr;
+-	//endianswap(&wd->slot); not needed
+-	// printf("weaver slot %i\n", wd->slot);
++	// Android stores one version byte followed by a big-endian uint32 slot.
++	if (weaver_data.size() != 5) {
++		printf("Invalid Weaver record length\n");
++		return false;
++	}
++	const auto* bytes = reinterpret_cast<const unsigned char*>(weaver_data.data());
++	if (bytes[0] != 1) {
++		printf("Unsupported Weaver record version\n");
++		return false;
++	}
++	const uint32_t slot = (uint32_t(bytes[1]) << 24) | (uint32_t(bytes[2]) << 16) |
++	                     (uint32_t(bytes[3]) << 8) | uint32_t(bytes[4]);
++	if (slot > INT_MAX) return false;
++	wd->version = bytes[0];
++	wd->slot = static_cast<int>(slot);
+ 	return true;
+ }
+ 
+@@ -495,6 +505,7 @@
+ 		std::string spblob_data;
+ 		if (!Get_Spblob_Data(spblob_path, handle_str, ".spblob", "spblob", &spblob_data))
+ 			return disk_decryption_secret_key;
++		if (spblob_data.size() < 2 + 12 + 16) return disk_decryption_secret_key;
+ 		unsigned char* byteptr = (unsigned char*)spblob_data.data();
+ 		if (*byteptr != SYNTHETIC_PASSWORD_VERSION_V2 && *byteptr != SYNTHETIC_PASSWORD_VERSION_V1
+ 				&& *byteptr != SYNTHETIC_PASSWORD_VERSION_V3) {
+@@ -549,6 +560,10 @@
+ 			ks2::KeyEntryResponse keyEntryResponse;
+ 			::ndk::SpAIBinder keystoreBinder(AServiceManager_checkService("android.system.keystore2.IKeystoreService/default"));
+ 			auto keystore = ks2::IKeystoreService::fromBinder(keystoreBinder);
++			if (!keystore) {
++				printf("Keystore2 service unavailable\n");
++				return disk_decryption_secret_key;
++			}
+ 			auto rc = keystore->getKeyEntry(keyDescriptor(keystore_alias), &keyEntryResponse);
+ 			if (!rc.isOk()) {
+ 				auto error = unwrapError(rc);
+@@ -577,6 +592,11 @@
+ 				return disk_decryption_secret_key;
+ 			}
+ 
++			if (!optPlaintext || optPlaintext->size() < 12 + 16 ||
++			    optPlaintext->size() - 12 > INT_MAX) {
++				printf("Invalid synthetic password payload length\n");
++				return disk_decryption_secret_key;
++			}
+ 			size_t keystore_result_size = optPlaintext->size();
+ 			unsigned char* keystore_result = (unsigned char*)malloc(keystore_result_size);
+ 			if (!keystore_result) {
+@@ -593,6 +613,7 @@
+ 			void* personalized_application_id = PersonalizedHashBinary(PERSONALISATION_APPLICATION_ID, (const char*)application_id, application_id_size);
+ 			if (!personalized_application_id) {
+ 				printf("Unable to obtain personalized_application_id\n");
++				free(keystore_result);
+ 				return disk_decryption_secret_key;
+ 			}
+ 			// printf("personalized application id: "); output_hex((unsigned char*)personalized_application_id, SHA512_DIGEST_LENGTH); printf("\n");
+@@ -602,20 +623,32 @@
+ 			EVP_CIPHER_CTX *d_ctx = EVP_CIPHER_CTX_new();
+ 			const unsigned char* key = (const unsigned char*)personalized_application_id; // The key is the now personalized copy of the application ID
+ 			// printf("key: "); output_hex((const unsigned char*)key, 32); printf("\n");
+-			EVP_DecryptInit(d_ctx, EVP_aes_256_gcm(), key, intermediate_iv);
++			const int plaintext_capacity = cipher_size - 16;
+ 			unsigned char* secret_key = (unsigned char*)malloc(cipher_size);
+-			if (!secret_key) {
+-				printf("malloc failure on secret key\n");
++			if (!d_ctx || !secret_key) {
++				EVP_CIPHER_CTX_free(d_ctx);
++				free(secret_key);
++				free(personalized_application_id);
++				free(keystore_result);
+ 				return disk_decryption_secret_key;
+ 			}
+-			EVP_DecryptUpdate(d_ctx, secret_key, &actual_size, intermediate_cipher_text, cipher_size);
+-			unsigned char tag[AES_BLOCK_SIZE];
+-			EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16, tag);
+-			EVP_DecryptFinal_ex(d_ctx, secret_key + actual_size, &final_size);
++			const bool authenticated =
++				EVP_DecryptInit_ex(d_ctx, EVP_aes_256_gcm(), nullptr, key, intermediate_iv) == 1 &&
++				EVP_DecryptUpdate(d_ctx, secret_key, &actual_size, intermediate_cipher_text,
++				                  plaintext_capacity) == 1 &&
++				EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16,
++				                   (void*)(intermediate_cipher_text + plaintext_capacity)) == 1 &&
++				EVP_DecryptFinal_ex(d_ctx, secret_key + actual_size, &final_size) == 1;
+ 			EVP_CIPHER_CTX_free(d_ctx);
+ 			free(personalized_application_id);
+ 			free(keystore_result);
+-			int secret_key_real_size = actual_size - 16;
++			if (!authenticated) {
++				OPENSSL_cleanse(secret_key, cipher_size);
++				free(secret_key);
++				printf("Synthetic password authentication failed\n");
++				return disk_decryption_secret_key;
++			}
++			int secret_key_real_size = actual_size + final_size;
+ 			// printf("secret key:  "); output_hex((const unsigned char*)secret_key, secret_key_real_size); printf("\n");
+ 			// The payload data from the keystore update is further personalized at https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#153
+ 			// We now have the disk decryption key!
