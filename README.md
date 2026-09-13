@@ -1,33 +1,52 @@
 # TWRP device tree for Xiaomi Pad 8 Pro
 
-**Early bring-up — boot, input, USB, automatic charging, and non-destructive fastbootd validation complete.** Android 16 FBE and PIN/password decryption are now under investigation/implementation; neither is working yet. Backup/restore, MTP storage access, destructive partition operations, and release readiness remain unvalidated.
+**Bring-up is complete through the QSEE / TrustZone bridge.** Boot, display, touch, USB/ADB, automatic charging, non-destructive fastbootd validation, and stock Qualcomm `qseecomd` listener registration all work with SELinux **Enforcing**. Encryption is intentionally still off: Android 16 FBE and PIN/password decryption are not implemented and `/data` is not mounted. Backup/restore, MTP storage access, destructive partition operations, and release readiness remain unvalidated.
 
-## Current context and next target
-
-The latest maintainer-reported boot-tested image includes the Boot Control recovery implementation, fastbootd battery-query compatibility patch, and established touch/USB/charging/reboot fixes.
+## Current status
 
 | Item | Validated baseline |
 | --- | --- |
-| Device-tree commit | `352a279a5c0e5d68d0e5368ace97da2ddfd25c77` |
-| Image size | 27,906,048 bytes |
 | Recovery | TWRP `3.7.1_14-0`, Android 14 / AP2A |
 | Stock | HyperOS 3 Android 16, `OS3.0.303.0.WPYMIXM` / `piano_global` |
+| Image size | 28,160,000 bytes |
+| Branch | `twrp-14` |
 
-Image SHA-256:
+Known-good recovery image SHA-256:
 
 ```text
-9d25d378fb2b13e1929adbd3f7a6ae67b9d034ba50d46f65347efb4742f670e4
+0d7d0d6789f01aed5b12f2362b0a740825798966afe9c5ba5ed06139d5bfa935
 ```
 
-Stages 1–6, 10, 12, and 14–17 are validated within their documented scope. Stage 18's safe/non-destructive side is complete. Real USB OTG remains pending. Stage 8/9 implementation is now authorized, following the encryption audit; successful metadata/DE access and credential-based CE unlock must each be demonstrated before being marked complete. Image size must be measured after every meaningful crypto packaging change.
+Encryption is intentionally **off**. `/data` and `/metadata` are not mounted, no FBE build flag is enabled, and no key material is generated or replaced.
 
-Preferred roadmap: real USB OTG → Stage 8 FBE → Stage 9 credential decryption → backup/restore → MTP → SELinux cleanup → device-tree cleanup → reproducible clean build → full regression → fallback verification → documentation → release. The current authorized engineering work is Stage 8/9; OTG remains an independent pending test.
+### Roadmap
 
-The [Build #23 record](docs/bringup-build23.md) and [screen/suspend/charging record](docs/suspend-charging-2026-09-11.md) preserve historical evidence. Their earlier pending-stage descriptions are superseded by this status. Build #23's `bootable/recovery/twrpApex.cpp` fix remains required; its builder patch was recorded at `~/piano-build23-apex-fd-fix.patch`. Preserve unrelated pre-existing GUI/render changes rather than resetting or committing them wholesale.
+| # | Stage | Status |
+| --- | --- | --- |
+| 1 | Basic TWRP bring-up | Done |
+| 2 | Hardware / vendor recovery bring-up | Done |
+| 3 | QSEE / TrustZone bridge | Done |
+| 4 | KeyMint / Gatekeeper / Weaver / SecureClock / SharedSecret | Next |
+| 5 | Metadata encryption key unwrap / `dm-default-key` | Pending |
+| 6 | Mount existing F2FS `/data` | Pending |
+| 7 | Existing DE storage unlock | Pending |
+| 8 | PIN/password + Gatekeeper + Weaver + Synthetic Password | Pending |
+| 9 | CE / user0 + `/data/media/0` | Pending |
+| 10 | MTP / internal storage / backup / restore / sideload | Pending |
+| 11 | Cleanup and full regression under SELinux Enforcing | Pending |
+| 12 | TWRP 14 full FBE completion | Pending |
 
-Only `recovery_a` is experimental. Never touch `recovery_b` or switch testing to slot B. Start with healthy slot A and keep stock recovery available. Prefer recovery_a flash → full HyperOS boot → `adb reboot recovery`. Never modify boot/vendor_boot/vbmeta merely for recovery, blindly disable AVB, or erase all of misc. Any justified BCB clear is limited to its first 2 KiB; see [operator guidance](AGENTS.md).
+After TWRP 14: TWRP 14.1 -> OrangeFox 14.1 -> LineageOS -> Evolution X.
 
-Image size matters below partition capacity: the latest 27,906,048-byte image boots; the earlier 27,844,608-byte control also worked, while 29,401,088 bytes with incompressible padding failed. This supports an early-boot size-constraint hypothesis, not an official exact limit; 100 MiB capacity alone does not establish bootability.
+Real USB OTG remains an independent pending test.
+
+### Safety constraints
+
+Only `recovery_a` is experimental. Never touch `recovery_b` or switch testing to slot B. Start from a healthy slot A and keep stock recovery available. Prefer recovery_a flash -> full HyperOS boot -> `adb reboot recovery`. Never modify boot/vendor_boot/vbmeta merely for recovery, blindly disable AVB, or erase all of misc. Any justified BCB clear is limited to its first 2 KiB; see [operator guidance](AGENTS.md).
+
+Image size matters below partition capacity: the 28,160,000-byte QSEE image and the earlier 27,906,048-byte and 27,844,608-byte images all boot, while 29,401,088 bytes with incompressible padding failed. This supports an early-boot size-constraint hypothesis, not an official exact limit; 100 MiB capacity alone does not establish bootability.
+
+The [Build #23 record](docs/bringup-build23.md) and [screen/suspend/charging record](docs/suspend-charging-2026-09-11.md) preserve historical evidence; their earlier pending-stage descriptions are superseded by this status. Build #23's `bootable/recovery/twrpApex.cpp` fix remains required.
 
 ## Device
 
@@ -61,6 +80,83 @@ The ramdisk uses legacy LZ4 compression. Stock uses compressed Virtual A/B and d
 
 The configured dynamic group contains `odm`, `product`, `system`, `system_dlkm`, `system_ext`, `vendor`, and `vendor_dlkm`. Both DLKM partitions are logical first-stage partitions. Stock userdata uses F2FS, FBE v2, and wrapped-key metadata encryption. These are researched stock characteristics, **not evidence of working TWRP decryption**.
 
+## QSEE / TrustZone bridge
+
+The stock HyperOS 3 (Android 16) `qseecomd` is used **unmodified** and runs inside the Android 14 recovery as `u:r:tee:s0` with SELinux Enforcing.
+
+| Item | Value |
+| --- | --- |
+| Recovery path | `/vendor/bin/piano-qseecomd` |
+| Source blob | `prebuilt/qseecomd`, taken verbatim from stock vendor |
+| SHA-256 | `dc1ccdd0a32891f0f38048383499e8849e071840ef5bb210eefa1b0e3b2c369f` |
+| Service | `disabled`, `oneshot` — started manually with `setprop ctl.start vendor.qseecomd` |
+
+### Android 16 compatibility island
+
+The Android 16 daemon cannot link against the Android 14 recovery userspace directly. Five stock **system** libraries are packaged into a private directory used only by this daemon:
+
+```text
+/vendor/piano-stock-qsee-system/lib64/
+    libbinder.so
+    libbinder_ndk.so
+    libapexsupport.so
+    liblog.so
+    libvndksupport.so
+```
+
+Search order:
+
+```text
+/vendor/piano-stock-qsee-system/lib64
+/vendor/piano-stock/lib64
+/vendor/piano-stock/lib64/hw
+/system/lib64
+```
+
+Recovery `libc`, `libm`, `libdl`, and the linker are **not** copied or replaced. `libbinder_ndk.so` must be paired with the matching stock `libbinder.so`, which is why both are packaged rather than reusing the recovery copies.
+
+### Automatic stock vendor mount
+
+Recovery `/vendor` is left untouched. The active-slot stock vendor image is mounted read-only at an alternate path once TWRP has created the logical-partition mapper links:
+
+```text
+on property:twrp.super.symlinks_created=true && property:vendor.piano.qsee.mount_attempted=0
+    setprop vendor.piano.qsee.mount_attempted 1
+    mkdir /vendor/piano-stock 0755 root root
+    wait /dev/block/mapper/vendor${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/vendor${ro.boot.slot_suffix} /vendor/piano-stock ro
+
+    symlink /dev/block/platform/soc/1d84000.ufshc /dev/block/bootdevice
+```
+
+The guard property is set to `1` **before** the mount is attempted, because TWRP writes `twrp.super.symlinks_created` more than once; without the guard the trigger re-ran and produced repeated mount/lchown noise.
+
+### Recovery-only bootdevice alias
+
+Stock QSEE code resolves storage through `/dev/block/bootdevice`, which recovery does not create. The same trigger adds a symlink to `/dev/block/platform/soc/1d84000.ufshc`. This exists only inside the recovery `/dev` and changes no firmware path. No generic whole-UFS permissions are granted; only the dedicated SSD/SG/BSG/LUN4 nodes are labelled.
+
+### SELinux
+
+Everything runs Enforcing. The support consists of targeted labels and narrow rules only:
+
+- ramdisk `/system` loader paths are `restorecon`'d in `on early-fs` so the existing Android `file_contexts` apply, instead of granting `tee` access to `rootfs`;
+- `/dev/dma_heap/qcom,qseecom` is labelled `vendor_dmabuf_qseecom_heap_device`;
+- narrow property policy for `vendor.piano.qsee.mount_attempted` and `vendor.sys.listeners.registered`.
+
+Deliberately absent: `allow tee block_device:blk_file`, `allow tee device:chr_file`, `allow tee rootfs:file`. The `tee block_device:dir` and `tee device:dir` traversal rules are intentional and must not be removed on the mistaken grounds that they are broad file access.
+
+### Verified runtime result
+
+On a fresh boot the stock vendor is mounted exactly once, then a single manual start yields:
+
+```text
+state=running
+vendor.sys.listeners.registered=true
+process: u:r:tee:s0  piano-qseecomd  wchan=sigsuspend
+```
+
+No relevant new QSEE denials were observed and SELinux remained Enforcing.
+
 ## Repository structure
 
 ```text
@@ -74,6 +170,11 @@ recovery/root/init.recovery.usb.rc  Device-specific Qualcomm USB initialization
 recovery/root/odm/                 Touch service, libraries, firmware and models
 recovery/root/vendor/lib/modules/  Xiaomi and Novatek touch drivers
 recovery/root/system/bin/piano-adsp-bootstrap.sh  Automatic charging bootstrap
+recovery/root/vendor/etc/ueventd.rc Recovery ueventd rules
+recovery/root/vendor/piano-stock-qsee-system/lib64/  Android 16 QSEE compatibility libraries
+Android.mk                         Prebuilt modules for the QSEE island and qseecomd
+prebuilt/qseecomd                  Unmodified stock HyperOS 3 qseecomd
+sepolicy/vendor/                   Targeted TEE, property and file-context policy
 patches/system_core/              External fastbootd source patch
 ```
 
@@ -131,9 +232,12 @@ These are required runtime assets in the validated baseline, not disposable buil
 | Touchscreen driver / coordinate mapping | Working |
 | Screen / panel / touch / ADB after wake / timeout | Validated — Stage 14 |
 | Deep suspend / RTC wake | Validated with USB physically disconnected |
-| SELinux | Enforcing during validated touch testing |
+| SELinux | Enforcing, including QSEE listener registration |
 | `/data` mounting / internal storage / `/data/media/0` | WIP / unvalidated |
-| Android 16 / HyperOS 3 FBE and PIN/password decryption | Implementation authorized; not yet working |
+| QSEE / TrustZone bridge, stock `qseecomd` listener registration | Validated under SELinux Enforcing |
+| Read-only stock vendor mount at `/vendor/piano-stock` | Validated |
+| Recovery-only `/dev/block/bootdevice` alias | Validated |
+| Android 16 / HyperOS 3 FBE and PIN/password decryption | Intentionally off; not implemented |
 | Physical paths / OTG false-match correction | Validated — Builds #20/#21; real OTG pending |
 | Logical mappings / EROFS read mounts | Validated — Stage 10 |
 | Additional vendor fstab suppression | Validated — Build #22 |
@@ -201,7 +305,7 @@ Fetching `system_dlkm_a` was rejected by the implementation whitelist, which per
 
 ## Known limitations
 
-Boot, USB/ADB, landscape display, and touch are established for the current milestone. Storage access and decryption are not established: do not assume `/data`, internal storage, or `/data/media/0` is accessible. Real USB OTG, destructive dynamic-partition operations, and backup/restore still require validation. Read-only logical mounts and fastbootd entry are established. Runtime behavior depends on the stock boot environment and matching drivers. No GitHub Actions builder is included.
+Boot, USB/ADB, landscape display, touch, and the QSEE/TrustZone bridge are established for the current milestone. Storage access and decryption are not established: do not assume `/data`, internal storage, or `/data/media/0` is accessible. Real USB OTG, destructive dynamic-partition operations, and backup/restore still require validation. Read-only logical mounts and fastbootd entry are established. Runtime behavior depends on the stock boot environment and matching drivers. No GitHub Actions builder is included.
 
 CN and Global devices must retain region-matched stock firmware and kernel/module tuples. Global users must not flash CN firmware to use this tree. Cross-region compatibility has not been proven.
 

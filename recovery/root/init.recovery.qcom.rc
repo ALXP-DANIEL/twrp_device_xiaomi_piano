@@ -1,6 +1,7 @@
 on init
     write /sys/class/backlight/panel0-backlight/brightness 200
     setprop sys.usb.configfs 1
+    setprop vendor.piano.qsee.mount_attempted 0
 
 on property:ro.boot.usbcontroller=*
     setprop sys.usb.controller ${ro.boot.usbcontroller}
@@ -10,6 +11,23 @@ on property:ro.boot.usbcontroller=*
 
 on boot
     setprop sys.usb.config adb
+
+# QSEE recovery ramdisk SELinux labels
+#
+# Ramdisk files are initially rootfs-labeled. Apply the existing Android
+# file_contexts narrowly instead of granting tee access to rootfs.
+on early-fs
+    restorecon /system/bin
+    restorecon /system/bin/linker64
+    restorecon /system/etc/ld.config.txt
+    restorecon /system/lib64
+    restorecon /system/lib64/libc.so
+    restorecon /system/lib64/libm.so
+    restorecon /system/lib64/libdl.so
+    restorecon /system/lib64/ld-android.so
+    restorecon /system/lib64/libdl_android.so
+    restorecon_recursive /vendor/piano-stock-qsee-system
+    restorecon /vendor/bin/piano-qseecomd
 
 # Xiaomi Pad 8 Pro host-touch stack
 on post-fs
@@ -28,3 +46,31 @@ service piano_adsp_bootstrap /system/bin/sh /system/bin/piano-adsp-bootstrap.sh
 
 on post-fs
     start piano_adsp_bootstrap
+
+# Stock vendor compatibility mount for QSEE
+#
+# Keep recovery /vendor untouched. Mount the active-slot stock vendor
+# read-only at an alternate path used only by the QSEE compatibility island.
+# TWRP creates the logical-partition mapper links after normal post-fs.
+on property:twrp.super.symlinks_created=true && property:vendor.piano.qsee.mount_attempted=0
+    setprop vendor.piano.qsee.mount_attempted 1
+    mkdir /vendor/piano-stock 0755 root root
+    wait /dev/block/mapper/vendor${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/vendor${ro.boot.slot_suffix} /vendor/piano-stock ro
+
+    # Recovery-only bootdevice compatibility alias required by stock QSEE.
+    symlink /dev/block/platform/soc/1d84000.ufshc /dev/block/bootdevice
+
+# Stock piano Qualcomm TEE daemon
+#
+# Disabled intentionally. The stock vendor compatibility mount and the
+# bootdevice alias are prepared automatically, but qseecomd is started
+# manually with: setprop ctl.start vendor.qseecomd
+service vendor.qseecomd /vendor/bin/piano-qseecomd
+    class core
+    user root
+    group root drmrpc
+    socket notify-topology stream 0660 system drmrpc
+    disabled
+    oneshot
+    setenv LD_LIBRARY_PATH /vendor/piano-stock-qsee-system/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64

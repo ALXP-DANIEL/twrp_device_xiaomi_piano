@@ -1,0 +1,5 @@
+# Stock QSEE listener completion property.
+vendor_internal_prop(vendor_tee_listener_prop)
+
+# Recovery QSEE stock-vendor mount one-shot state.
+vendor_internal_prop(vendor_piano_qsee_mount_state_prop)

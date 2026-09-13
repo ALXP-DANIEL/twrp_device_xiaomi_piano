@@ -1,0 +1,21 @@
+# Qualcomm TEE / SMC Invoke
+/dev/smcinvoke    u:object_r:tee_device:s0
+
+# Qualcomm secure-storage SSD partition
+/dev/block/platform/soc/1d84000\.ufshc/by-name/ssd    u:object_r:vendor_ssd_block_device:s0
+
+# Qualcomm UFS / SCSI secure-storage devices — stock piano labels.
+/dev/sg[0-9]+          u:object_r:vendor_sg_device:s0
+/dev/ufs-bsg.*         u:object_r:vendor_bsg_device:s0
+/dev/0:0:0:4           u:object_r:vendor_ufs_lun4_bsg_device:s0
+/dev/0:0:0:49476       u:object_r:vendor_bsg_device:s0
+
+# HyperOS 3 Android 16 compatibility libraries used only by stock qseecomd
+/vendor/piano-stock-qsee-system(/.*)?                    u:object_r:system_file:s0
+/vendor/piano-stock-qsee-system/lib64/[^/]+\.so          u:object_r:system_lib_file:s0
+
+# Stock qseecomd packaged for recovery
+/vendor/bin/piano-qseecomd    u:object_r:tee_exec:s0
+
+# Qualcomm QSEE DMA heap — stock piano label
+/dev/dma_heap/qcom,qseecom    u:object_r:vendor_dmabuf_qseecom_heap_device:s0

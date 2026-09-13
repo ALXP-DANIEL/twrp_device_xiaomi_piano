@@ -62,6 +62,9 @@ TARGET_USERIMAGES_USE_F2FS := true
 # Metadata
 BOARD_USES_METADATA_PARTITION := true
 
+# SELinux
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
+
 # Recovery
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery.fstab
 

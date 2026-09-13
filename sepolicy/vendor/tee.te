@@ -1,0 +1,128 @@
+# Stage 8: match stock piano TEE access to the generic block-device
+# directory only. No generic block-device file access is granted.
+allow tee block_device:dir { getattr search };
+
+# Stock vendor_sepolicy.cil:9433 grants sys_rawio to tee_202404 (tee).
+allow tee self:capability sys_rawio;
+
+# Stage 8: qseecomd drops privileges after listener registration.
+# Disassembly of stock /vendor/bin/qseecomd shows setgid(1000) at 0x7470
+# and setuid(1000) at 0x7504; either returning non-zero logs
+# "qseecomd permission reset failed, not starting services" and returns -1,
+# which becomes exit status 255. The same stock rule at
+# vendor_sepolicy.cil:9433 grants these to tee_202404; only setgid and
+# setuid are taken from it here. chown, sys_admin and capability2
+# block_suspend are deliberately not granted.
+allow tee self:capability { setgid setuid };
+
+# Stage 8: match stock piano TEE access to the generic /dev directory.
+allow tee device:dir {
+    ioctl
+    read
+    getattr
+    lock
+    open
+    watch
+    watch_reads
+    search
+};
+
+# Stage 8: stock piano SSD partition type and TEE access.
+# This is deliberately specific to the SSD block device; generic
+# block_device:blk_file access is not granted.
+type vendor_ssd_block_device, dev_type;
+
+allow tee vendor_ssd_block_device:blk_file {
+    ioctl
+    read
+    write
+    getattr
+    lock
+    append
+    map
+    open
+    watch
+    watch_reads
+};
+
+# Stage 8: stock Qualcomm UFS secure-storage character devices.
+type vendor_sg_device, dev_type;
+type vendor_bsg_device, dev_type;
+type vendor_ufs_lun4_bsg_device, dev_type;
+
+# Stock piano TEE access to SCSI generic devices.
+allow tee vendor_sg_device:chr_file {
+    ioctl
+    read
+    write
+    getattr
+    setattr
+    lock
+    append
+    map
+    open
+    watch
+    watch_reads
+};
+
+# Stock piano TEE access to generic UFS BSG devices.
+allow tee vendor_bsg_device:chr_file {
+    ioctl
+    read
+    write
+    getattr
+    lock
+    append
+    map
+    open
+    watch
+    watch_reads
+};
+
+# Stock piano TEE access to the UFS LUN4 BSG device.
+allow tee vendor_ufs_lun4_bsg_device:chr_file {
+    ioctl
+    read
+    write
+    getattr
+    lock
+    append
+    map
+    open
+    watch
+    watch_reads
+};
+
+# Stage 8: stock piano TEE wake-lock access.
+allow tee sysfs_wake_lock:file {
+    ioctl
+    read
+    write
+    getattr
+    lock
+    append
+    map
+    open
+    watch
+    watch_reads
+};
+
+# Qualcomm QSEE DMA heap.
+# Stock piano labels /dev/dma_heap/qcom,qseecom with a dedicated type and
+# grants tee only the access required by BufferAllocator.
+type vendor_dmabuf_qseecom_heap_device, dev_type, dmabuf_heap_device_type;
+
+allow tee vendor_dmabuf_qseecom_heap_device:chr_file {
+    ioctl
+    read
+    getattr
+    lock
+    map
+    open
+    watch
+    watch_reads
+};
+
+
+# Allow qseecomd to publish listener-registration completion.
+set_prop(tee, vendor_tee_listener_prop)
