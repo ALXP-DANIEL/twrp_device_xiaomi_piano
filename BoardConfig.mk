@@ -149,7 +149,7 @@ TARGET_COPY_OUT_VENDOR := vendor
 # /mnt/vendor/persist and read-only, which is where stock puts it; nothing needs
 # a /persist root directory and creating one would invite something to mount it
 # there by accident.
-BOARD_ROOT_EXTRA_FOLDERS := firmware product
+BOARD_ROOT_EXTRA_FOLDERS := firmware product system_ext
 
 # SELinux. Enforcing is a requirement, never relaxed to make a stage pass.
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor

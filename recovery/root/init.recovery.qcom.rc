@@ -234,8 +234,33 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mkdir /product 0755 root root
     mkdir /mnt/product 0755 root root
     mkdir /mnt/product/vm-persist 0755 root root
-    wait /dev/block/mapper/product${ro.boot.slot_suffix} 5
+    wait /dev/block/mapper/product${ro.boot.slot_suffix} 20
     mount erofs /dev/block/mapper/product${ro.boot.slot_suffix} /product ro
+
+    # The virtualization service does not boot the VM itself. It forks
+    # /system_ext/bin/qcrosvm, a crosvm-derived VMM, and that process opens the
+    # Gunyah device and attaches the VM's disks. Without this mount the fork
+    # fails and the only symptom is a launch that quietly does nothing.
+    mkdir /system_ext 0755 root root
+    wait /dev/block/mapper/system_ext${ro.boot.slot_suffix} 20
+    mount erofs /dev/block/mapper/system_ext${ro.boot.slot_suffix} /system_ext ro
+
+    # Stock system, READ-ONLY.
+    #
+    # qcrosvm is a Rust binary and its dylibs -- libdevices, libstd,
+    # libbase_rust, libdisk, libvm_memory, libcros_async and the rest -- live in
+    # the stock /system/lib64, of which there are 227. Recovery replaces /system
+    # with its own ramdisk, so none of them are reachable and the VMM dies
+    # before main():
+    #
+    #   CANNOT LINK EXECUTABLE "/system_ext/bin/qcrosvm":
+    #   library "libdevices.dylib.so" not found: needed by main executable
+    #
+    # Mounted beside the other stock views rather than over /system, which must
+    # stay the recovery's own. The service's LD_LIBRARY_PATH points here.
+    mkdir /vendor/piano-stock-system 0755 root root
+    wait /dev/block/mapper/system${ro.boot.slot_suffix} 20
+    mount erofs /dev/block/mapper/system${ro.boot.slot_suffix} /vendor/piano-stock-system ro
     wait /dev/block/by-name/vm-persist 5
     mount ext4 /dev/block/by-name/vm-persist /mnt/product/vm-persist ro nosuid nodev noatime
 
@@ -250,6 +275,16 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
 
     # The virtualization service, which brings up trustedvm and with it MiTEE.
     # Started last in this block because it needs both VM disks mounted above.
+    #
+    # sys.boot_completed gates the whole thing. qvirtservice's autostart handler
+    # reads it and waits: with the property unset the launch thread logs
+    # "Launching trustedvm" and then does nothing at all -- no VMM fork, no
+    # device opened, no error. Recovery never completes an Android boot, so the
+    # property is never set by anything else.
+    #
+    # This is a real precondition of the VM manager, not a test being forced to
+    # pass. Nothing else in this recovery reads sys.boot_completed.
+    setprop sys.boot_completed 1
     start vendor.qvirtservice
 
 
@@ -389,4 +424,18 @@ service vendor.qvirtservice /vendor/bin/piano-qvirt-service
     group root system
     disabled
     oneshot
-    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/lib64:/vendor/piano-stock/lib64:/system/lib64
+    # qcrosvm inherits this environment, and the ORDER here is load-bearing.
+    #
+    # Stock system must come before stock vendor. With vendor first, a stock
+    # system library resolves one of its own dependencies against a recovery
+    # library that does not carry the symbol:
+    #
+    #   CANNOT LINK EXECUTABLE "/system_ext/bin/qcrosvm": cannot locate symbol
+    #   "_ZN7android25MEDIA_MIMETYPE_AUDIO_IAMFE" referenced by
+    #   ".../piano-stock-system/system/lib64/libaudioclient_aidl_conversion.so"
+    #
+    # which is the Phase 4 binder-pair law in a new place: one interface, two
+    # builds. The recovery's own binder pair still comes first, so that fix
+    # holds; everything else resolves stock-first. Both orders were tested on
+    # the device before this line was written.
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock-system/system/lib64:/system_ext/lib64:/vendor/piano-stock/lib64:/vendor/lib64:/system/lib64

@@ -70,3 +70,24 @@ get_prop(piano_qvirt, boot_status_prop)
 # talking to the property service at all:
 #   avc: denied { write } name="property_service" tclass=sock_file
 set_prop(piano_qvirt, vendor_piano_qvirt_prop)
+
+# RUNTIME AVC EVIDENCE (2026-09-15). The virtualization service does not boot
+# the VM itself: it forks /system_ext/bin/qcrosvm, a crosvm-derived virtual
+# machine monitor, and that is what opens the Gunyah device and attaches the
+# VM's disks. The binary carries vendor_qcrosvm_exec on disk, but the type was
+# absent from the recovery policy, so it resolved as unlabeled and exec was
+# refused -- the same defect as /data/vendor/tzstorage:
+#
+#   SELinux: Context u:object_r:vendor_qcrosvm_exec:s0 is not valid (left unmapped)
+#   avc: denied { execute } name="qcrosvm" dev="dm-4"
+#        tcontext=u:object_r:unlabeled:s0
+#        trawcon="u:object_r:vendor_qcrosvm_exec:s0"
+#   qvirtservice: trustedvm: launch failed - errno=Permission denied
+#
+# Stock runs qcrosvm in its own domain. It is kept in piano_qvirt here rather
+# than given a second private domain, so that the rules it needs appear as
+# denials against one domain and can be granted against evidence. If it turns
+# out to need something piano_qvirt should not have, it gets split then.
+type vendor_qcrosvm_exec, exec_type, file_type;
+
+allow piano_qvirt vendor_qcrosvm_exec:file { read getattr open map execute execute_no_trans };

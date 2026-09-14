@@ -68,3 +68,7 @@
 
 # The Gunyah loader's misc device, used to create and start guest VMs.
 /dev/qgunyah                       u:object_r:vendor_qgunyah_device:s0
+
+# The crosvm-derived VMM that actually boots the trustedvm guest. It lives on
+# the stock system_ext partition, mounted read-only in recovery.
+/system_ext/bin/qcrosvm    u:object_r:vendor_qcrosvm_exec:s0
