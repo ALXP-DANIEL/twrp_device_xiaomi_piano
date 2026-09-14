@@ -1,0 +1,5 @@
+# Xiaomi Pad 8 Pro (piano) — TWRP 16 recovery file contexts.
+#
+# Intentionally empty for the first image. The TWRP14 tree's entries all
+# existed to support the stock secure-world payload, which is not packaged
+# here. Entries are added back only alongside the component that needs them.

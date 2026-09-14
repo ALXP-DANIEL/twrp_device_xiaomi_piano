@@ -1,0 +1,29 @@
+# Xiaomi Pad 8 Pro (piano) — TWRP 16 recovery init
+#
+# Minimal first image. Only what is needed to boot, light the panel, bring up
+# USB and load the touch stack. None of the TWRP14 QSEE compatibility
+# machinery is present: no stock vendor/odm mounts, no compatibility island,
+# no binder symlinks, no secure-world services. Those return one at a time,
+# each justified by an observed dependency.
+
+on init
+    write /sys/class/backlight/panel0-backlight/brightness 200
+    setprop sys.usb.configfs 1
+
+on property:ro.boot.usbcontroller=*
+    setprop sys.usb.controller ${ro.boot.usbcontroller}
+    wait /sys/bus/platform/devices/${ro.boot.usb.dwc3_msm:-a600000.ssusb}/mode
+    write /sys/bus/platform/devices/${ro.boot.usb.dwc3_msm:-a600000.ssusb}/mode peripheral
+    wait /sys/class/udc/${ro.boot.usbcontroller} 1
+
+on boot
+    setprop sys.usb.config adb
+
+# Xiaomi Pad 8 Pro host-touch stack.
+#
+# xiaomi_touch.ko must load before nt36532_touch.ko. The odm touch_report
+# service is declared by the packaged /odm/etc/init/touch_report.rc.
+on post-fs
+    insmod /vendor/lib/modules/xiaomi_touch.ko
+    insmod /vendor/lib/modules/nt36532_touch.ko
+    start odm.touch_report

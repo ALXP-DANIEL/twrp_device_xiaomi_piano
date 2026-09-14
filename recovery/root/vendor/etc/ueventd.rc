@@ -1,0 +1,5 @@
+# Qualcomm TEE / SMC Invoke
+/dev/smcinvoke    0660    system    drmrpc
+
+# Qualcomm QSEE DMA heap — stock piano ownership/mode
+/dev/dma_heap/qcom,qseecom    0444    system    system
