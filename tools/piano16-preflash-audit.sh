@@ -25,6 +25,7 @@ IMG=${1:-}
 #
 #   31,403,528  loaded, init ran, adbd came up (recovery then hit a link error)
 #   31,265,294  boots into TWRP, crypto enabled, UI up
+#   33,652,931  boots, decrypts /data, repeatedly across many reboot cycles
 #
 # So the old figure is not a limit for images of this shape, and the true
 # ceiling is unmeasured. This gate therefore asserts only what is known:
@@ -36,7 +37,7 @@ IMG=${1:-}
 #
 # Raise PROVEN_BOOT when a larger image is confirmed to boot on hardware, and
 # only then.
-PROVEN_BOOT=31265294
+PROVEN_BOOT=33652931
 PART_SIZE=104857600
 
 pass=0; fail=0
