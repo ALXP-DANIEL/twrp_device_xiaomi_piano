@@ -1,0 +1,33 @@
+<!--
+    Recovery device VINTF manifest.
+
+    TWRP ships no VINTF manifest, so servicemanager reports
+    "NULL VINTF MANIFEST!" and client lookups such as
+    AServiceManager_isDeclared() fail. Only the secure services this recovery
+    actually runs are declared.
+
+    Note from the TWRP14 bring-up: declaring these was NOT what made
+    registration work - the binder pair was - but the declarations are still
+    required for clients that check isDeclared() before binding, which is how
+    the decryption path finds Gatekeeper.
+-->
+<manifest version="1.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IKeyMintDevice/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <version>3</version>
+        <fqname>IRemotelyProvisionedComponent/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.secureclock</name>
+        <fqname>ISecureClock/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.sharedsecret</name>
+        <fqname>ISharedSecret/default</fqname>
+    </hal>
+</manifest>

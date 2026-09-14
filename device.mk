@@ -68,3 +68,7 @@ PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
 # Phase 4: stock Qualcomm TEE daemon (disabled in init, started manually).
 PRODUCT_PACKAGES += \
     piano_qseecomd
+
+# Phase 5: stock KeyMint HAL (disabled in init, started manually).
+PRODUCT_PACKAGES += \
+    piano_keymint

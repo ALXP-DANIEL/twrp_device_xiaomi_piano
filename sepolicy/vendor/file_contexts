@@ -25,3 +25,8 @@
 
 # Stock Xiaomi Weaver HAL packaged for recovery. The exec type is declared
 # by the device policy because AOSP has no default Weaver implementation.
+
+# Stock KeyMint HAL. The AOSP hal_keymint_default_exec type is reused so init
+# performs the standard domain transition into hal_keymint_default, whose
+# rules and the four service labels already exist in the platform policy.
+/vendor/bin/hw/piano-keymint    u:object_r:hal_keymint_default_exec:s0

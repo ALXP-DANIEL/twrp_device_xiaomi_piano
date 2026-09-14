@@ -39,6 +39,7 @@ on boot
 on early-fs
     restorecon /system/etc/task_profiles.json
     restorecon /vendor/bin/piano-qseecomd
+    restorecon /vendor/bin/hw/piano-keymint
 
     # Everything the stock binaries link must carry its real label, not the
     # rootfs label ramdisk files arrive with. u:r:tee:s0 cannot map or read a
@@ -129,4 +130,22 @@ service vendor.qseecomd /vendor/bin/piano-qseecomd
     socket notify-topology stream 0660 system drmrpc
     disabled
     oneshot
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+
+# Phase 5: stock piano KeyMint HAL.
+#
+# One process hosts IKeyMintDevice, IRemotelyProvisionedComponent,
+# ISecureClock and ISharedSecret. It needs the stock vendor mount and a
+# running qseecomd, so it stays disabled and is started manually during
+# bring-up with: setprop ctl.start vendor.keymint
+#
+# Same LD_LIBRARY_PATH as qseecomd, including the binder symlink directory:
+# this binary links libbinder_ndk too, so the pair must match for the same
+# reason qseecomd's did.
+service vendor.keymint /vendor/bin/hw/piano-keymint
+    class hal
+    user system
+    group system drmrpc
+    disabled
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
