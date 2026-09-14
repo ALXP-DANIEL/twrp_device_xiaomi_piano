@@ -139,6 +139,23 @@ BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery.fstab
 TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
 
+# Ramdisk prune hook.
+#
+# BOARD_RECOVERY_IMAGE_PREPARE is run by build/make/core/Makefile as the final
+# step of the recovery ramdisk staging recipe, after every module has been
+# installed and after the ramdisk-files manifests have been written. The script
+# removes payload proven dead in this image and regenerates both manifests.
+#
+# This is the only lever left for size on this device: the bootloader's
+# compressed-ramdisk bound is fixed, and compression cannot be changed because
+# only legacy LZ4 boots. The ELF closure gate runs afterwards on the packed
+# image and fails the build if anything pruned was actually needed.
+# Assigned with '=' , not ':=' . TARGET_RECOVERY_ROOT_OUT is not defined yet
+# when BoardConfig.mk is parsed; a simple assignment captures it empty and the
+# script is invoked with no argument. Recursive assignment defers expansion to
+# the point the recipe runs, where the variable is set.
+BOARD_RECOVERY_IMAGE_PREPARE = bash $(DEVICE_PATH)/tools/piano16-ramdisk-prune.sh $(TARGET_RECOVERY_ROOT_OUT)
+
 # Display / input, proven on hardware in the TWRP14 tree.
 TW_THEME := landscape_hdpi
 

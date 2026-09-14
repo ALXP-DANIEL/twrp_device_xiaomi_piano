@@ -97,10 +97,43 @@ index a5a5ab5..a4bfd4d 100755
  			free(keystore_result);
  			int secret_key_real_size = actual_size - 16;
 diff --git a/FsCrypt.cpp b/FsCrypt.cpp
-index 54dd91c..84132c0 100644
+index 54dd91c..d3c0ab8 100644
 --- a/FsCrypt.cpp
 +++ b/FsCrypt.cpp
-@@ -884,8 +884,12 @@ bool fscrypt_set_ce_key_protection(userid_t user_id, const std::string& secret_h
+@@ -189,25 +189,13 @@ static bool get_ce_key_new_path(const std::string& directory_path,
+     return false;
+ }
+ 
+-// Discard all keys but the named one; rename it to canonical name.
+-static bool fixate_user_ce_key(const std::string& directory_path, const std::string& to_fix,
+-                               const std::vector<std::string>& paths) {
+-    bool need_sync = false;
+-    for (auto const other_path : paths) {
+-        if (other_path != to_fix) {
+-            android::vold::destroyKey(other_path);
+-            need_sync = true;
+-        }
+-    }
+-    auto const current_path = get_ce_key_current_path(directory_path);
+-    if (to_fix != current_path) {
+-        LOG(DEBUG) << "Renaming " << to_fix << " to " << current_path;
+-        if (!android::vold::RenameKeyDir(to_fix, current_path)) return false;
+-        need_sync = true;
+-    }
+-    if (need_sync && !android::vold::FsyncDirectory(directory_path)) return false;
+-    return true;
+-}
++// AOSP fixates the CE key here: it deletes every sibling key binding and
++// renames the survivor to the canonical path. That is an unrecoverable
++// Keystore deletion, and in recovery we have no way to know whether the user
++// was midway through a credential change when the device was rebooted. The
++// call site in read_user_ce_key() is therefore removed, and with no caller
++// left the function itself is removed too rather than silenced -- keeping a
++// dead copy of a destructive routine in the tree invites it back.
+ 
+ // Unlike AOSP this does not fixate the key it found: dropping the sibling
+ // bindings is a Keystore deletion we cannot undo if the user was midway
+@@ -884,8 +872,12 @@ bool fscrypt_set_ce_key_protection(userid_t user_id, const std::string& secret_h
          LOG(INFO) << "Deferring fixation of " << directory_path << " until checkpoint is committed";
          s_deferred_fixations[directory_path] = ce_key_path;
      } else {
@@ -114,7 +147,7 @@ index 54dd91c..84132c0 100644
      }
  
      if (s_new_ce_keys.erase(user_id)) {
-@@ -898,8 +902,8 @@ void fscrypt_deferred_fixate_ce_keys() {
+@@ -898,8 +890,8 @@ void fscrypt_deferred_fixate_ce_keys() {
      for (const auto& it : s_deferred_fixations) {
          const auto& directory_path = it.first;
          const auto& to_fix = it.second;

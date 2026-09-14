@@ -82,3 +82,25 @@ must leave the user's protectors exactly as they were.
 Negative tests have not been run, and crypto is still disabled in
 `BoardConfig.mk`. These patches are staged, compiled only when crypto is
 enabled, and unproven until then.
+
+## Compile validation (2026-09-14)
+
+The patch is now compiled by every build, even with crypto off: `libvold` is a
+static dependency of `bootable/recovery:recovery`, so the code is built and
+linked regardless of `TW_INCLUDE_CRYPTO`.
+
+That surfaced a real defect in the first version of this patch. Removing the
+`fixate_user_ce_key()` call from `read_user_ce_key()` left the function with no
+callers, and the tree builds with `-Werror`:
+
+```
+system/vold/FsCrypt.cpp:193:13: error: unused function 'fixate_user_ce_key' [-Werror,-Wunused-function]
+```
+
+The function is now removed outright rather than silenced. Keeping a dead copy
+of a routine whose whole purpose is to delete Keystore key bindings invites it
+back; if the behaviour is ever wanted again it should be reintroduced
+deliberately, with the recovery-specific reasoning written down at that point.
+
+The patch has not yet been exercised at runtime — crypto is still off, so none
+of these paths execute. It is compiled, not proven.
