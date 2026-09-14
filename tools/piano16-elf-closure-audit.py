@@ -64,6 +64,12 @@ RUNTIME_MOUNT_OBJECTS = {
         "links the stock QTI KeyMint runtime (libqtikeymint, "
         "android.hardware.keymaster@4.0), resolved from /vendor/piano-stock/"
         "lib64. Both verified present in the stock vendor partition.",
+    "vendor/bin/piano-ssgtzd":
+        "Qualcomm's GlobalPlatform TA loader. Links the stock QMI and Mink "
+        "transport runtime (libqrtr, libqmi_cci, libqmi_csi, libqmi_common_so, "
+        "libqcbor, libminksocket_vendor, libminkdescriptor), resolved from "
+        "/vendor/piano-stock/lib64. All seven verified present on the stock "
+        "vendor partition.",
     "vendor/bin/piano-qseecomd":
         "links the stock vendor runtime (libQSEEComAPI, libminkdescriptor, "
         "libdrmfs, libdmabufheap), resolved from /vendor/piano-stock/lib64 "

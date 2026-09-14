@@ -184,3 +184,17 @@ set_prop(tee, vendor_tee_listener_prop)
 # talks to the secure world:
 #   avc: denied { append } name="wake_lock" tcontext=u:object_r:sysfs_wake_lock:s0
 allow tee sysfs_wake_lock:file { open read write append getattr };
+
+
+# ssgtzd, the GlobalPlatform TA loader, runs in this same domain (see
+# file_contexts). It needs two things qseecomd does not:
+#
+# WAKE_ALARM, because stock grants it alongside BLOCK_SUSPEND — loading a TA
+# must not be interrupted by suspend any more than an RPMB write may be.
+allow tee self:capability2 wake_alarm;
+
+# Its two control sockets are created by init, not by the daemon, so no rule is
+# added for them here. If the daemon turns out to need more than this, the AVC
+# will say so and the rule can be written against that evidence rather than
+# against a guess — the block_device, UFS and block_suspend rules in this file
+# were all restored that way after being trimmed on reasoning alone.

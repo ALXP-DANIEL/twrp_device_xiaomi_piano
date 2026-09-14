@@ -71,3 +71,32 @@ LOCAL_MULTILIB := 64
 LOCAL_STRIP_MODULE := false
 LOCAL_CHECK_ELF_FILES := false
 include $(BUILD_PREBUILT)
+
+# Stock HyperOS 3 Qualcomm GlobalPlatform trusted-application loader, packaged
+# unmodified as /vendor/bin/piano-ssgtzd.
+#
+# SHA-256 d52f5ef5fd7dc40b9fa622f97b430552cb223771dd15f258be54bb871372ac1e
+#
+# Weaver is a GP TA rather than a QSEE listener, so qseecomd alone cannot reach
+# it. This daemon loads the TA from the modem partition, which init mounts
+# read-only at /vendor/firmware_mnt. Without it TEEC_OpenSession fails and TWRP
+# never gets as far as checking the credential.
+#
+# It is packaged into the ramdisk rather than run from the stock vendor mount so
+# that it carries a label this policy defines. Files on the mounted stock
+# partition keep stock's own xattrs, including types such as vendor_ssgtzd_exec
+# which do not exist here, and no domain transition would happen.
+#
+# ELF dependency checking is disabled for the same reason as the other four: it
+# links the stock vendor runtime, resolved from /vendor/piano-stock/lib64.
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_ssgtzd
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-ssgtzd
+LOCAL_SRC_FILES := prebuilt/ssgtzd
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)

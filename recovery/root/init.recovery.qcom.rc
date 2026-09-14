@@ -39,6 +39,7 @@ on boot
 on early-fs
     restorecon /system/etc/task_profiles.json
     restorecon_recursive /system/etc/vintf
+    restorecon /vendor/bin/piano-ssgtzd
     restorecon /vendor/bin/piano-qseecomd
     restorecon /vendor/bin/hw/piano-keymint
     restorecon /vendor/bin/hw/piano-gatekeeper
@@ -134,6 +135,23 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # No property gate is needed for the OS version and patch levels: they are
     # stamped at build time by PLATFORM_SECURITY_PATCH and friends in
     # BoardConfig.mk, so they are already correct before init starts anything.
+    # The modem partition carries the GlobalPlatform trusted applications, and
+    # Weaver is one of them. /vendor/firmware_mnt/image holds 57 TAs named by
+    # UUID, including MiTEEProxyService and the gpqese TA, and ssgtzd looks for
+    # them there. Without this mount the Weaver HAL comes up and registers, but
+    # its first real call dies:
+    #
+    #   mi_weaver-impl: TEEC_InitializeContext() 0x00000000
+    #   mi_weaver-impl: openSession ... Weaver GP TA : 0xFFFF0000
+    #   mi_weaver-impl: TEEC_OpenSession() failed : 0xFFFF0000
+    #   recovery: Failed to get weaver key size / Failed to decrypt user 0
+    #
+    # Read-only, and the modem partition is never written.
+    mkdir /vendor/firmware_mnt 0771 system system
+    wait /dev/block/by-name/modem${ro.boot.slot_suffix} 5
+    mount vfat /dev/block/by-name/modem${ro.boot.slot_suffix} /vendor/firmware_mnt ro shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337
+    mount none /vendor/firmware_mnt /firmware bind
+
     start vendor.qseecomd
 
 
@@ -141,6 +159,7 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
 # on its own signal avoids a sleep, and each service still starts exactly once
 # because they remain "disabled" and nothing else starts them.
 on property:vendor.sys.listeners.registered=true
+    start vendor.ssgtzd
     start vendor.keymint
     start vendor.gatekeeper_default
     start vendor.weaver
@@ -207,3 +226,26 @@ service vendor.weaver /vendor/bin/hw/piano-weaver
     group system drmrpc
     disabled
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock-odm/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+
+# Qualcomm's GlobalPlatform trusted-application loader.
+#
+# Weaver is a GP TA, not a QSEE listener, so qseecomd alone is not enough: the TA
+# has to be loaded from the modem partition mounted above, and ssgtzd is what
+# loads it. Without it TEEC_OpenSession fails and the credential can never be
+# checked - TWRP reports "Failed to get weaver key size" and gives up before it
+# ever looks at the PIN, which is why no retry attempt was consumed by the
+# failures.
+#
+# Definition copied from the stock /vendor/etc/init/ssgtzd.rc, including the
+# capabilities and both sockets. Stock starts it from an early-boot trigger; here
+# it starts with the rest of the secure stack, after qseecomd's listeners are up.
+service vendor.ssgtzd /vendor/bin/piano-ssgtzd
+    class late_start
+    user system
+    group system oem_2912 wakelock
+    capabilities WAKE_ALARM BLOCK_SUSPEND
+    disabled
+    socket ssgtzd stream 0660 system oem_2912
+    socket ssgtzd_opener stream 0660 system system
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
