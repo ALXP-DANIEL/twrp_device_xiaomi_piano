@@ -209,30 +209,68 @@ TW_INCLUDE_FBE_METADATA_DECRYPT := true
 
 # OS version and security patch level.
 #
-# KeyMint binds keys to these. The recovery ships the AOSP defaults
-# (security patch 2025-06-05), while this firmware reports 2026-07-01 for system
-# and 2026-02-01 for vendor. With the defaults in place, metadata decryption
-# failed: KeyMint answered begin() with -62 KEY_REQUIRES_UPGRADE and the
-# following upgradeKey() failed with -8, so /data could not be decrypted.
+# KeyMint binds every key to os_version, os_patchlevel, vendor_patchlevel and
+# boot_patchlevel, and refuses a key whose bound values do not match what it
+# reports. The recovery ships the AOSP defaults - security patch 2025-06-05,
+# and no vendor patch level at all - against firmware reporting 2026-07-01 for
+# system and 2026-02-01 for vendor.
 #
-# The values are read from the device's own build.prop at runtime rather than
-# written here, so they stay correct if the firmware is updated. See the
-# override_system_props() patch in patches/bootable_recovery/ for why the
-# upstream call site is too late.
+# The first attempt aligned the recovery's values with the ROM's, read from the
+# device's own build.prop at runtime. That removed -62 KEY_REQUIRES_UPGRADE, but
+# decryption still failed, because the direction was wrong: KeyMint only ever
+# upgrades a key FORWARD. Reporting 2025-06-05 against a key bound to 2026-07-01
+# asks for a downgrade, which cannot be done, and the upgradeKey() that followed
+# failed with -8.
 #
-# Letting the key be used as-is is also the non-destructive outcome: an
-# upgradeKey() that succeeded would rewrite the key blob in /metadata.
-# TW_OVERRIDE_SYSTEM_PROPS is deliberately NOT used.
+# Setting the values far in the future instead makes every key look as though it
+# needs a routine forward upgrade, which KeyMint performs, and the operation then
+# proceeds. KEY_REQUIRES_UPGRADE is the normal path here, not a fault to avoid.
 #
-# twrp_recovery_defaults.go emits it as -DTW_OVERRIDE_SYSTEM_PROPS=%s with no
-# quotes, unlike the neighbouring string flags which use ="%s". An unquoted
-# value makes the compiler read a bare identifier:
-#   twrp.cpp:148:30: error: use of undeclared identifier 'ro'
-# and quoting it in make breaks Soong instead, because the value is written into
-# soong.<product>.variables as JSON:
-#   did not parse correctly: invalid character 'r' after object key:value pair
+# Taken from daixu0502/twrp_device_xiaomi_sm8750_bixi, the Xiaomi MIX Flip 2
+# tree for this same SoC and HyperOS generation, where decryption works.
 #
-# The property list therefore lives in override_system_props() in twrp.cpp. Only
-# the property NAMES are written there; every VALUE is still read from the
-# device's own build.prop at runtime.
-TW_INCLUDE_LIBRESETPROP := true
+# This does NOT modify key material. The upgraded blob is used for the operation
+# and deliberately never written back - see the Phase 7S change to
+# BeginKeystoreOp() in patches/system_vold/.
+# Values are a MINIMAL step forward, not the far-future ones bixi uses.
+#
+# 2099-12-31 with version 99.87.36 was tried first, copied from that tree. It
+# did move the failure: KeyMint asked for the forward upgrade as intended
+# (-62 KEY_REQUIRES_UPGRADE), but QTI's upgrade_key then refused with -8 and
+# keystore2 logged "Upgrade failed.". A TA that sanity-checks its inputs would
+# reject a patch level 73 years ahead and an OS version of 99, so this tries the
+# smallest step that is still forward of the key: the ROM's own OS version, and
+# a patch level one quarter past the firmware's 2026-07-01.
+#
+# bixi's values are not a proven recipe - that tree does not claim decryption
+# works, and it runs an Android 15 stock stack in a permissive domain, so its
+# KeyMint TA is not necessarily ours.
+# EXACT match to the firmware, stamped at build time.
+#
+# Three configurations have now been tried against this TEE:
+#
+#   recovery reports                     result
+#   2025-06-05, no vendor patch level    -62, then upgrade_key -8
+#   2026-10-01 / 2099-12-31 (forward)    -62, then upgrade_key -8
+#   2026-07-01 with vendor empty         -8 at begin()
+#
+# So QTI's upgrade_key refuses on this TA whatever we ask of it, and a forward
+# patch level only guarantees we enter that broken path. The far-future values
+# from the bixi tree behave no differently from a one-quarter step, which also
+# rules out the TA sanity-checking implausible inputs.
+#
+# The remaining option is to need no upgrade at all: report exactly what the key
+# was bound to, so KeyMint accepts it as-is. These are the firmware's own values,
+# read off the device - system 2026-07-01, vendor 2026-02-01 - and they must be
+# stamped at build time, because KeyMint caches them when it starts. The earlier
+# attempt applied them at runtime and was too late: reading the vendor value
+# requires mapping /vendor, which is what starts the HAL chain in the first place.
+#
+# These are firmware-specific. If the tablet takes a HyperOS update, they have to
+# be re-read from the device - /system/build.prop and /vendor/build.prop - and
+# updated here.
+PLATFORM_VERSION := 16
+PLATFORM_VERSION_LAST_STABLE := $(PLATFORM_VERSION)
+PLATFORM_SECURITY_PATCH := 2026-07-01
+VENDOR_SECURITY_PATCH := 2026-02-01
+BOOT_SECURITY_PATCH := $(PLATFORM_SECURITY_PATCH)

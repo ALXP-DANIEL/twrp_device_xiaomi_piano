@@ -130,7 +130,12 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # the symlink exists it loads stock's libbinder against the recovery's
     # libbinder_ndk and dies immediately, leaving init.svc.vendor.qseecomd
     # "stopped" with no listeners.
+    #
+    # No property gate is needed for the OS version and patch levels: they are
+    # stamped at build time by PLATFORM_SECURITY_PATCH and friends in
+    # BoardConfig.mk, so they are already correct before init starts anything.
     start vendor.qseecomd
+
 
 # The other three need qseecomd's listeners, which it announces itself. Chaining
 # on its own signal avoids a sleep, and each service still starts exactly once

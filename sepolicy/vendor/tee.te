@@ -12,10 +12,29 @@
 # "qseecomd permission reset failed, not starting services" and returns -1,
 # which becomes exit status 255.
 #
-# Stock vendor_sepolicy.cil:9433 grants more than this to tee_202404. Only
-# setgid and setuid are taken: chown, sys_admin and capability2
-# block_suspend are deliberately NOT granted.
+# Stock vendor_sepolicy.cil:9433 grants more than this to tee_202404. chown and
+# sys_admin are still not taken; block_suspend now is, see below.
 allow tee self:capability { setgid setuid };
+
+# RUNTIME AVC EVIDENCE (2026-09-14). This was withheld as unnecessary when this
+# file was written - "capability2 block_suspend deliberately NOT granted" - on
+# the reasoning that a recovery has no business blocking suspend. The device
+# disproved it, the same way it disproved the trimmed block_device rules above.
+#
+# qseecomd takes a wakelock around every RPMB transaction, because losing power
+# midway through a replay-protected write would be unrecoverable. Denied, the
+# wakelock fails with EPERM and the transaction is abandoned:
+#
+#   avc: denied { block_suspend } for comm="piano-qseecomd" capability=36
+#        scontext=u:r:tee:s0 tclass=capability2 permissive=0
+#   E rpmb: RPMB wakelock NOT acquired, write_res=-1, errno=1
+#
+# and a KeyMint key upgrade, which must persist state in RPMB, then fails:
+#
+#   E KeyMasterHalDevice: upgrade_key   ret: -8
+#
+# Stock grants this to tee_202404 for exactly this reason.
+allow tee self:capability2 block_suspend;
 
 # PROVEN. qseecomd publishes listener-registration completion, which is the
 # signal every later secure service waits on.
