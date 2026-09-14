@@ -46,7 +46,27 @@ TARGET_BOARD_PLATFORM := sun
 # slot supplies the kernel. Header v4, 4096-byte pages, legacy LZ4 ramdisk.
 BOARD_BOOT_HEADER_VERSION := 4
 BOARD_KERNEL_PAGESIZE := 4096
+# Ramdisk compression: legacy LZ4. Do not change this.
+#
+# Tested on hardware 2026-09-14: a gzip ramdisk BOOTLOOPS at the splash screen.
+# The device never enumerates USB in any mode and has to be forced into
+# fastboot by hand.
+#
+# The kernel config is not sufficient evidence here. /proc/config.gz reports
+# CONFIG_RD_GZIP=y, CONFIG_RD_LZ4=y and CONFIG_RD_ZSTD=y, so the kernel can
+# decompress all three - but the bootloader hands the image to the kernel and
+# evidently requires the legacy LZ4 format that stock recovery ships. Every
+# image that has ever booted on this device uses it.
+#
+# This also rules out zstd, which would otherwise have been very attractive:
+#
+#   lz4 legacy -12  28,905,980 bytes    (boots)
+#   gzip -9         24,931,569 bytes    (BOOTLOOPS)
+#   zstd -19        17,107,486 bytes    (untested, same risk, not worth it)
+#
+# The size budget must therefore be met by content, not compression.
 BOARD_RAMDISK_USE_LZ4 := true
+
 BOARD_EXCLUDE_KERNEL_FROM_RECOVERY_IMAGE := true
 BOARD_RECOVERYIMAGE_PARTITION_SIZE := 104857600
 BOARD_MKBOOTIMG_ARGS += --header_version $(BOARD_BOOT_HEADER_VERSION)
@@ -121,6 +141,17 @@ TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
 
 # Display / input, proven on hardware in the TWRP14 tree.
 TW_THEME := landscape_hdpi
+
+# Backlight.
+#
+# This panel's range is 0-4095 (/sys/class/backlight/panel0-backlight/
+# max_brightness). TWRP assumes a maximum of 255 when TW_MAX_BRIGHTNESS is
+# unset, so its "full brightness" landed at 255/4095 - about 6% - and the
+# screen was barely readable. Observed in recovery.log as
+# "Set_Brightness: Setting brightness control to 255".
+TW_BRIGHTNESS_PATH := /sys/class/backlight/panel0-backlight/brightness
+TW_MAX_BRIGHTNESS := 4095
+TW_DEFAULT_BRIGHTNESS := 2048
 RECOVERY_TOUCHSCREEN_SWAP_XY := true
 RECOVERY_TOUCHSCREEN_FLIP_Y := true
 

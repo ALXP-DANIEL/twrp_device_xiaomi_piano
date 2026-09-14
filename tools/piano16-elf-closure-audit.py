@@ -30,6 +30,21 @@ LINKER_PROVIDED = {
     "ld-android.so", "libstdc++.so",
 }
 
+# Objects that are present in the image but can never execute, verified by
+# inspection. Their unresolved dependencies are expected and are reported as
+# accepted exceptions rather than failures.
+#
+# Each entry must be justified by evidence that nothing loads the object:
+# no init .rc references it and no binary in the image names it.
+INERT_OBJECTS = {
+    "odm/lib64/sensors.touch.detect.so":
+        "not referenced by any binary or .rc in the image; libtouchreport.so "
+        "does not name it. Retained because the touch stack is kept complete.",
+    "system/bin/keystore_cli_v2":
+        "TWRP manual CLI tool, not started by init. Its keystore libraries "
+        "arrive only with TW_INCLUDE_CRYPTO.",
+}
+
 # Standard search order inside a recovery ramdisk.
 SEARCH_DIRS = [
     "system/lib64", "system/lib64/vndk-sp", "system/lib64/hw",
@@ -157,10 +172,27 @@ def main():
     print("DT_NEEDED:    %d references checked" % checked)
     print()
 
-    if not missing:
-        print("PASS: ELF closure complete, every DT_NEEDED resolves inside the image")
+    # Split findings into accepted exceptions and real failures.
+    excepted, real = {}, {}
+    for lib, users in missing.items():
+        if all(u in INERT_OBJECTS for u in users):
+            excepted[lib] = users
+        else:
+            real[lib] = [u for u in users if u not in INERT_OBJECTS]
+
+    if excepted:
+        print("accepted exceptions: %d unresolved references, all from objects"
+              " that cannot execute" % len(excepted))
+        for obj in sorted({u for us in excepted.values() for u in us}):
+            print("  %s" % obj)
+            print("      %s" % INERT_OBJECTS[obj])
+        print()
+
+    if not real:
+        print("PASS: ELF closure complete for every object that can execute")
         return 0
 
+    missing = real
     print("FAIL: %d unresolved shared library dependencies" % len(missing))
     print("      ALLOW_MISSING_DEPENDENCIES may have dropped a required module.")
     print()

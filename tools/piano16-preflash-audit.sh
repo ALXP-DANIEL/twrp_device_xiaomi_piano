@@ -60,7 +60,12 @@ echo
 [ "$KS" = "0" ]           && ok "kernel_size 0 (uses active-slot ROM kernel)" \
                           || bad "kernel_size $KS, expected 0"
 [ "$RS" -gt 0 ]           && ok "ramdisk present" || bad "no ramdisk"
-[ "$FMT" = "lz4-legacy" ] && ok "legacy LZ4 ramdisk" || bad "ramdisk format $FMT, expected lz4-legacy"
+# Legacy LZ4 only. A gzip ramdisk was tested on hardware and BOOTLOOPS at the
+# splash screen, despite the kernel reporting CONFIG_RD_GZIP=y - the bootloader
+# requires the format stock ships. Anything else is rejected here so it can
+# never reach the device again.
+[ "$FMT" = "lz4-legacy" ] && ok "legacy LZ4 ramdisk" \
+    || bad "ramdisk format $FMT - only lz4-legacy boots on this device (gzip bootloops)"
 [ "$FILESZ" -le "$PART_SIZE" ] && ok "image fits 100 MiB partition" \
                                || bad "image $FILESZ exceeds $PART_SIZE"
 

@@ -7,7 +7,9 @@
 # each justified by an observed dependency.
 
 on init
-    write /sys/class/backlight/panel0-backlight/brightness 200
+    # Panel range is 0-4095, not 0-255. 200 here was ~5% and left the
+    # splash barely visible before TWRP applies TW_DEFAULT_BRIGHTNESS.
+    write /sys/class/backlight/panel0-backlight/brightness 2048
     setprop sys.usb.configfs 1
 
 on property:ro.boot.usbcontroller=*
@@ -27,3 +29,47 @@ on post-fs
     insmod /vendor/lib/modules/xiaomi_touch.ko
     insmod /vendor/lib/modules/nt36532_touch.ko
     start odm.touch_report
+
+# Phase 3: read-only stock vendor and ODM views.
+#
+# The stock secure-world stack lives on the vendor and odm logical partitions.
+# Both are mounted READ-ONLY so the recovery can link against them without any
+# possibility of modifying the installed ROM. Unlike TWRP14, /vendor is
+# writable in this recovery, so the mountpoints sit there rather than in /tmp.
+#
+# TWRP creates the logical-partition mapper links and then sets
+# twrp.super.symlinks_created. The one-shot guard prevents a second mount
+# attempt if the property is re-triggered.
+#
+# Nothing here touches persist, userdata or metadata.
+on init
+    setprop vendor.piano.stock.mounted 0
+
+on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.mounted=0
+    setprop vendor.piano.stock.mounted 1
+    mkdir /vendor/piano-stock 0755 root root
+    mkdir /vendor/piano-stock-odm 0755 root root
+    wait /dev/block/mapper/vendor${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/vendor${ro.boot.slot_suffix} /vendor/piano-stock ro
+    wait /dev/block/mapper/odm${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/odm${ro.boot.slot_suffix} /vendor/piano-stock-odm ro
+
+# Phase 4: stock Qualcomm TEE daemon.
+#
+# Packaged unmodified from HyperOS 3 (SHA-256
+# dc1ccdd0a32891f0f38048383499e8849e071840ef5bb210eefa1b0e3b2c369f). Both this
+# recovery and the stock binary are Android 16, so no compatibility island is
+# packaged: the point of the TWRP16 migration is that none should be needed.
+# If an exact missing symbol proves otherwise, that evidence justifies adding
+# one library, not a wholesale port of the TWRP14 stack.
+#
+# Disabled deliberately. Started manually, exactly once per recovery boot:
+#     setprop ctl.start vendor.qseecomd
+service vendor.qseecomd /vendor/bin/piano-qseecomd
+    class core
+    user root
+    group root drmrpc
+    socket notify-topology stream 0660 system drmrpc
+    disabled
+    oneshot
+    setenv LD_LIBRARY_PATH /vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64

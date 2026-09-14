@@ -64,3 +64,7 @@ PRODUCT_SOONG_NAMESPACES += \
 # check; that blob is not packaged into their recovery image either, and it
 # would consume most of piano's recovery ramdisk budget.
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
+
+# Phase 4: stock Qualcomm TEE daemon (disabled in init, started manually).
+PRODUCT_PACKAGES += \
+    piano_qseecomd
