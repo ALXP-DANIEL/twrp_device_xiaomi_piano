@@ -61,3 +61,10 @@
 # label the filesystem carries.
 /mnt/vendor/persist                    u:object_r:vendor_persist_file:s0
 /mnt/vendor/persist/mitee(/.*)?        u:object_r:mitee_sfs_file:s0
+
+# Qualcomm virtualization service, packaged from the stock product partition.
+# It starts the trustedvm Gunyah guest VM that MiTEE runs inside.
+/vendor/bin/piano-qvirt-service    u:object_r:piano_qvirt_exec:s0
+
+# The Gunyah loader's misc device, used to create and start guest VMs.
+/dev/qgunyah                       u:object_r:vendor_qgunyah_device:s0

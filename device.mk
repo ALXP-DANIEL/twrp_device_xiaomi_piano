@@ -69,6 +69,9 @@ PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
 PRODUCT_PACKAGES += \
     piano_minkdaemon \
     piano_ssgtzd \
+    piano_qvirt_service \
+    piano_qvirt_ndk \
+    piano_qvirtmgr_conf \
     piano_qseecomd
 
 # Phase 5: stock KeyMint HAL (disabled in init, started manually).

@@ -130,3 +130,64 @@ LOCAL_MULTILIB := 64
 LOCAL_STRIP_MODULE := false
 LOCAL_CHECK_ELF_FILES := false
 include $(BUILD_PREBUILT)
+
+# Stock Qualcomm virtualization service, packaged unmodified as
+# /vendor/bin/piano-qvirt-service.
+#
+# SHA-256 bcc03258a6d597695322e4c21f88aced910da15fac31c044ebb06c3feffbb711
+#
+# This is what actually starts MiTEE. Xiaomi's secure world does not live in
+# QSEE and is not loaded by the bootloader for this boot path: it is a Gunyah
+# guest VM named "trustedvm", declared in the device tree as
+# soc/gh-secure-vm-loader@0 (vmid 45, firmware-name "trustedvm") and started
+# from userspace by this service, whose config
+# /vendor/etc/qvirtmgr-vndr.json carries "autostart": true for it.
+#
+# Nothing in recovery ever started it, so mitee_dlkm.ko came up with no secure
+# world to talk to:
+#   mitee msgq: msgq didn't set up, try later
+#   mitee smc notify connect failed
+# and every Weaver session failed at the transport, first as openSession ret=11
+# and, once the driver was loaded, as ret=15.
+#
+# ELF dependency checking is disabled for the same reason as the others: it
+# links the stock runtime.
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_qvirt_service
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-qvirt-service
+LOCAL_SRC_FILES := prebuilt/qvirt-service
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)
+
+# The AIDL interface library the service links against. It ships on the stock
+# product partition, which recovery has no reason to keep mounted, so it is
+# packaged into the ramdisk beside the service.
+#
+# SHA-256 b72f0dcfbdf578074f38ea2cd6c126d0dc6f53e0d2a8c3148f3ef8d1a9ef94ac
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_qvirt_ndk
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := vendor.qti.qvirt-V1-ndk.so
+LOCAL_SRC_FILES := prebuilt/vendor.qti.qvirt-V1-ndk.so
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/lib64
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)
+
+# The VM configuration the service reads. Copied unmodified from the stock
+# vendor partition; "trustedvm" is enabled and autostarts, "oemvm" is not.
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_qvirtmgr_conf
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := qvirtmgr-vndr.json
+LOCAL_SRC_FILES := prebuilt/qvirtmgr-vndr.json
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/etc
+include $(BUILD_PREBUILT)

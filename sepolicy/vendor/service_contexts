@@ -1,0 +1,3 @@
+# The virtualization service's AIDL interface. Stock does not label this name
+# in any service_contexts on the device, so the label is declared here.
+vendor.qti.qvirt.IVirtualizationService/default    u:object_r:piano_qvirt_service:s0

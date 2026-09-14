@@ -1,0 +1,50 @@
+# Xiaomi Pad 8 Pro (piano) — Qualcomm virtualization service.
+#
+# This service starts the Gunyah guest VM named "trustedvm", which is the
+# operating system MiTEE runs inside. Xiaomi's Weaver talks to a trusted
+# application hosted there, so until this VM is running there is no secure
+# world for the Weaver session to reach, and every attempt fails at the
+# transport rather than at anything to do with credentials or keys.
+#
+# On stock this runs as vendor_hal_qvirtservice_qti, a domain declared in the
+# platform policy that is not present here. A private domain is declared
+# instead, starting from nothing and growing only against runtime AVCs, the
+# same way the tee domain in this tree was built.
+type piano_qvirt, domain;
+type piano_qvirt_exec, exec_type, vendor_file_type, file_type;
+
+# init starts it; this performs the domain transition on exec.
+init_daemon_domain(piano_qvirt)
+
+# It registers vendor.qti.qvirt.IVirtualizationService/default. Without the
+# registration succeeding the process aborts on a CHECK and takes the VM launch
+# with it:
+#   Check failed: status == STATUS_OK (status=-3, STATUS_OK=0)
+type piano_qvirt_service, service_manager_type;
+
+add_service(piano_qvirt, piano_qvirt_service)
+binder_use(piano_qvirt)
+
+# The Gunyah loader's misc device. Creating, configuring and starting a guest
+# VM is entirely ioctl traffic against this node.
+type vendor_qgunyah_device, dev_type;
+
+allow piano_qvirt vendor_qgunyah_device:chr_file {
+    ioctl
+    read
+    write
+    getattr
+    lock
+    map
+    open
+};
+
+# The two VM disks are attached through loopback devices: the read-only root
+# filesystem at /product/firmware/vm-system/system.img and the VM's own
+# persistent image under /mnt/product/vm-persist.
+allow piano_qvirt loop_control_device:chr_file { ioctl read write open getattr };
+allow piano_qvirt loop_device:blk_file { ioctl read write open getattr };
+
+# Its config file and the two disk images.
+allow piano_qvirt vendor_configs_file:file { read getattr open map };
+allow piano_qvirt vendor_configs_file:dir { search getattr open read };

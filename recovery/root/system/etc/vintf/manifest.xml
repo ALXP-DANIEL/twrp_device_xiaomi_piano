@@ -51,4 +51,23 @@
         <version>2</version>
         <fqname>IWeaver/default</fqname>
     </hal>
+
+    <!--
+        The Qualcomm virtualization service, which starts the "trustedvm"
+        Gunyah guest VM that MiTEE runs inside. It registers
+        IVirtualizationService before it will stay alive: run without this
+        declaration it parses its config, launches its autostart thread and
+        then aborts on
+
+          Check failed: status == STATUS_OK (status=-3, STATUS_OK=0)
+          Could not find vendor.qti.qvirt.IVirtualizationService/default
+          in the VINTF manifest
+
+        killing the VM launch with it.
+    -->
+    <hal format="aidl">
+        <name>vendor.qti.qvirt</name>
+        <version>1</version>
+        <fqname>IVirtualizationService/default</fqname>
+    </hal>
 </manifest>

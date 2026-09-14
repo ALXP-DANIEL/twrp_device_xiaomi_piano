@@ -196,6 +196,30 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     wait /dev/block/by-name/persist 5
     mount ext4 /dev/block/by-name/persist /mnt/vendor/persist ro nosuid nodev noatime
 
+    # The trustedvm guest VM's two disks.
+    #
+    # MiTEE runs inside a Gunyah guest VM named "trustedvm", whose root
+    # filesystem is /product/firmware/vm-system/system.img on the product
+    # partition and whose persistent image is
+    # /mnt/product/vm-persist/trustedvm/persist.img on the vm-persist
+    # partition. The virtualization service reads both paths literally out of
+    # /vendor/etc/qvirtmgr-vndr.json, so both have to appear at exactly those
+    # locations.
+    #
+    # Both are mounted READ-ONLY. The stock config marks persist.img
+    # "read_write": true, so the VM may well refuse to boot this way; that is
+    # deliberate for now, because a read-only attempt cannot damage the image
+    # and the failure will say plainly whether write access is really needed.
+    # vm-persist is a different partition from persist and neither is written
+    # here.
+    mkdir /product 0755 root root
+    mkdir /mnt/product 0755 root root
+    mkdir /mnt/product/vm-persist 0755 root root
+    wait /dev/block/mapper/product${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/product${ro.boot.slot_suffix} /product ro
+    wait /dev/block/by-name/vm-persist 5
+    mount ext4 /dev/block/by-name/vm-persist /mnt/product/vm-persist ro nosuid nodev noatime
+
     start vendor.qseecomd
 
     # The HLOS Mink opener. Xiaomi's Weaver does not go through QSEE at all:
@@ -204,6 +228,10 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # cannot be opened and TWRP reports "Failed to get weaver key size" long
     # before it looks at the credential.
     start vendor.minkdaemon
+
+    # The virtualization service, which brings up trustedvm and with it MiTEE.
+    # Started last in this block because it needs both VM disks mounted above.
+    start vendor.qvirtservice
 
 
 # The other three need qseecomd's listeners, which it announces itself. Chaining
@@ -324,3 +352,22 @@ service vendor.minkdaemon /vendor/bin/piano-minkdaemon
     disabled
     socket hlos_mink_opener stream 0660 system drmrpc
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+# Stock Qualcomm virtualization service.
+#
+# Packaged from the stock product partition (SHA-256
+# bcc03258a6d597695322e4c21f88aced910da15fac31c044ebb06c3feffbb711) as
+# /vendor/bin/piano-qvirt-service. Its config is the stock
+# qvirtmgr-vndr.json, in which trustedvm carries "autostart": true, so the
+# service launches the VM itself on start and exits once startup completes --
+# hence oneshot, matching the stock product init file.
+#
+# Runs as root: the stock service does, and creating loopback devices for the
+# VM disks requires it.
+service vendor.qvirtservice /vendor/bin/piano-qvirt-service
+    class core
+    user root
+    group root system
+    disabled
+    oneshot
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/lib64:/vendor/piano-stock/lib64:/system/lib64
