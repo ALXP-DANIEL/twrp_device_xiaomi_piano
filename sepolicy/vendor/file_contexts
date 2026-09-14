@@ -30,3 +30,10 @@
 # performs the standard domain transition into hal_keymint_default, whose
 # rules and the four service labels already exist in the platform policy.
 /vendor/bin/hw/piano-keymint    u:object_r:hal_keymint_default_exec:s0
+
+# Stock Gatekeeper HAL. Reuses the AOSP hal_gatekeeper_default domain.
+/vendor/bin/hw/piano-gatekeeper    u:object_r:hal_gatekeeper_default_exec:s0
+
+# Stock Xiaomi Weaver HAL. hal_weaver_default and its exec type are declared
+# by system/sepolicy/vendor/hal_weaver_default.te in the platform policy.
+/vendor/bin/hw/piano-weaver    u:object_r:hal_weaver_default_exec:s0

@@ -53,6 +53,13 @@ INERT_OBJECTS = {
 # only valid while every missing library is confirmed present in the stock
 # vendor image, which is checked on device during Phase 3/4 validation.
 RUNTIME_MOUNT_OBJECTS = {
+    "vendor/bin/hw/piano-gatekeeper":
+        "links the stock QTI Gatekeeper runtime, resolved from "
+        "/vendor/piano-stock/lib64.",
+    "vendor/bin/hw/piano-weaver":
+        "links libmi_weaver from the read-only odm view and the stock vendor "
+        "runtime, resolved from /vendor/piano-stock-odm/lib64 and "
+        "/vendor/piano-stock/lib64.",
     "vendor/bin/hw/piano-keymint":
         "links the stock QTI KeyMint runtime (libqtikeymint, "
         "android.hardware.keymaster@4.0), resolved from /vendor/piano-stock/"

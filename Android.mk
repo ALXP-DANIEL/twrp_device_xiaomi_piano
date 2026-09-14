@@ -36,3 +36,38 @@ LOCAL_MULTILIB := 64
 LOCAL_STRIP_MODULE := false
 LOCAL_CHECK_ELF_FILES := false
 include $(BUILD_PREBUILT)
+
+# Stock HyperOS 3 Gatekeeper HAL.
+# SHA-256 c66d485ff028a8ca7185f302e11d9ee846ffcc71b3cf9ce3bd9b0f7cf868728b
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_gatekeeper
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-gatekeeper
+LOCAL_SRC_FILES := prebuilt/gatekeeper-service-qti
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin/hw
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)
+
+# Stock HyperOS 3 Xiaomi Weaver HAL (miweaver).
+#
+# Its only odm-private dependency is libmi_weaver.so, which resolves from the
+# read-only odm view at /vendor/piano-stock-odm. The transport is not a
+# separate GlobalPlatform driver: libmi_weaver -> libGPTEE_vendor dlopens
+# libGPMTEEC_vendor (Qualcomm TZComWrap), which is the same smcinvoke/Mink
+# path qseecomd and KeyMint use.
+#
+# SHA-256 7b8974bef8e944f3cfc52659924e8d9e9beef1ae29dc43c2780c83e410af659c
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_weaver
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-weaver
+LOCAL_SRC_FILES := prebuilt/weaver-service
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin/hw
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)

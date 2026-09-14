@@ -41,6 +41,8 @@ on early-fs
     restorecon_recursive /system/etc/vintf
     restorecon /vendor/bin/piano-qseecomd
     restorecon /vendor/bin/hw/piano-keymint
+    restorecon /vendor/bin/hw/piano-gatekeeper
+    restorecon /vendor/bin/hw/piano-weaver
 
     # Everything the stock binaries link must carry its real label, not the
     # rootfs label ramdisk files arrive with. u:r:tee:s0 cannot map or read a
@@ -150,3 +152,29 @@ service vendor.keymint /vendor/bin/hw/piano-keymint
     group system drmrpc
     disabled
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+
+# Phase 6: stock piano Gatekeeper HAL.
+#
+# Stock enables this when vendor.gatekeeper.is_security_level_spu=0, which
+# init sets above. Disabled during bring-up and started manually only after
+# QSEE listeners are confirmed healthy:
+#     setprop ctl.start vendor.gatekeeper_default
+service vendor.gatekeeper_default /vendor/bin/hw/piano-gatekeeper
+    class early_hal
+    user system
+    group system
+    disabled
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+# Phase 7: stock piano Xiaomi Weaver HAL.
+#
+# libmi_weaver.so is odm-private, hence the extra odm path. Disabled during
+# bring-up and started manually:
+#     setprop ctl.start vendor.weaver
+service vendor.weaver /vendor/bin/hw/piano-weaver
+    class hal
+    user system
+    group system drmrpc
+    disabled
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock-odm/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64

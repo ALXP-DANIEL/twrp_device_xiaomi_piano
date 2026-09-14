@@ -72,3 +72,8 @@ PRODUCT_PACKAGES += \
 # Phase 5: stock KeyMint HAL (disabled in init, started manually).
 PRODUCT_PACKAGES += \
     piano_keymint
+
+# Phases 6 and 7: stock Gatekeeper and Weaver HALs (disabled, started manually).
+PRODUCT_PACKAGES += \
+    piano_gatekeeper \
+    piano_weaver
