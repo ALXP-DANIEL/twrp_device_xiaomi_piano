@@ -154,6 +154,48 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mount vfat /dev/block/by-name/modem${ro.boot.slot_suffix} /vendor/firmware_mnt ro shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337
     mount none /vendor/firmware_mnt /firmware bind
 
+    # MiTEE kernel driver.
+    #
+    # Xiaomi's Weaver TA lives behind MiTEE, not QSEE, and MiTEE's HLOS side
+    # talks to the kernel through /dev/tee0 and /dev/teepriv0. Those nodes are
+    # created by mitee_dlkm.ko, which ships on the vendor_dlkm logical
+    # partition - a partition recovery never mounts. Without it the driver is
+    # absent, the nodes do not exist, and every MiTEE session fails opaquely:
+    #
+    #   GPTEE: TEEC_InitializeContext: Loading module libGPMTEEC_vendor.so
+    #   ssgtzd: Failed to construct Buffer from TA with uid
+    #           8AAAF201-2460-0010-AABB-CCDD00000006 Error Code 3
+    #   mi_weaver-impl: TEEC_OpenSession() failed : 0xFFFF0000  (openSession ret=11)
+    #
+    # Loading the module by hand produced the nodes immediately:
+    #   mitee_dlkm: mitee_tee_init: mitee tee init
+    #   mitee_dlkm: mitee_core_init: initialized driver
+    #
+    # The partition is mounted READ-ONLY and only the one module is loaded.
+    mkdir /vendor/piano-stock-dlkm 0755 root root
+    wait /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} 5
+    mount erofs /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} /vendor/piano-stock-dlkm ro
+    insmod /vendor/piano-stock-dlkm/lib/modules/mitee_dlkm.ko
+
+    # Stock persist, READ-ONLY.
+    #
+    # Two consumers ask for it. qseecomd's DRM filesystem shim retries and then
+    # gives up:
+    #
+    #   DrmLibFs: persist partition is not mounted, dispatch failed
+    #
+    # and MiTEE keeps its secure file storage at /mnt/vendor/persist/mitee/data
+    # (stock labels that mitee_sfs_file and grants it to the tee domain).
+    #
+    # Mounted "ro" so nothing in recovery can alter DRM keys, calibration or
+    # any other persist content. The partition is never written, never
+    # formatted and never fsck'd here: the stock entry carries "check", and
+    # that is deliberately not reproduced.
+    mkdir /mnt/vendor 0771 root system
+    mkdir /mnt/vendor/persist 0771 root system
+    wait /dev/block/by-name/persist 5
+    mount ext4 /dev/block/by-name/persist /mnt/vendor/persist ro nosuid nodev noatime
+
     start vendor.qseecomd
 
     # The HLOS Mink opener. Xiaomi's Weaver does not go through QSEE at all:

@@ -47,3 +47,17 @@
 # HLOS Mink opener. Same domain: it is a client of the same secure world, and
 # the tee domain already carries the smcinvoke and DMA-heap access it needs.
 /vendor/bin/piano-minkdaemon    u:object_r:tee_exec:s0
+
+# MiTEE kernel driver nodes, created by mitee_dlkm.ko. Stock piano labels.
+/dev/tee[0-9]+       u:object_r:mitee_client_device:s0
+/dev/teepriv[0-9]+   u:object_r:mitee_client_device:s0
+
+# Qualcomm secure-world persistent storage on userdata. Stock piano label,
+# declared so the existing on-disk label resolves instead of unlabeled.
+/data/vendor/tzstorage(/.*)?   u:object_r:vendor_data_tzstorage_file:s0
+
+# Stock persist, mounted read-only in recovery. Only the two labels the TEE
+# domain actually traverses are declared; the rest of persist keeps whatever
+# label the filesystem carries.
+/mnt/vendor/persist                    u:object_r:vendor_persist_file:s0
+/mnt/vendor/persist/mitee(/.*)?        u:object_r:mitee_sfs_file:s0
