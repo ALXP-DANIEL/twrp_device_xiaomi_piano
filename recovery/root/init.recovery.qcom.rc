@@ -11,6 +11,12 @@ on init
     # splash barely visible before TWRP applies TW_DEFAULT_BRIGHTNESS.
     write /sys/class/backlight/panel0-backlight/brightness 2048
     setprop sys.usb.configfs 1
+    # Mirrored from stock vendor build.prop. The secure services read these at
+    # startup: is_security_level_spu selects the TrustZone-backed
+    # implementation over SPU, retry_timer is the KeyMint startup retry
+    # interval. Needed by phases 5 and 6, harmless before then.
+    setprop vendor.gatekeeper.is_security_level_spu 0
+    setprop vendor.keymint.retry_timer 5
 
 on property:ro.boot.usbcontroller=*
     setprop sys.usb.controller ${ro.boot.usbcontroller}
@@ -34,23 +40,18 @@ on early-fs
     restorecon /system/etc/task_profiles.json
     restorecon /vendor/bin/piano-qseecomd
 
-    # The dynamic linker and core libraries must carry their real labels too.
-    # They are rootfs-labelled in the ramdisk, and u:r:tee:s0 cannot map a
-    # rootfs file, so qseecomd dies instantly:
-    #   avc: denied { map } path="/system/bin/linker64" scontext=u:r:tee:s0
-    #   Service 'vendor.qseecomd' received signal 11
-    restorecon /system/bin
-    restorecon /system/bin/linker64
+    # Everything the stock binaries link must carry its real label, not the
+    # rootfs label ramdisk files arrive with. u:r:tee:s0 cannot map or read a
+    # rootfs file, which produced first
+    #   avc: denied { map } path="/system/bin/linker64"   -> SIGSEGV
+    # and then
+    #   avc: denied { read } name="liblog.so"             -> exit status 1
+    #
+    # Listing individual libraries is guesswork - the set is whatever the stock
+    # binaries happen to need. Relabel the directories wholesale instead.
+    restorecon_recursive /system/bin
+    restorecon_recursive /system/lib64
     restorecon /system/etc/ld.config.txt
-    restorecon /system/lib64
-    restorecon /system/lib64/libc.so
-    restorecon /system/lib64/libm.so
-    restorecon /system/lib64/libdl.so
-    restorecon /system/lib64/ld-android.so
-    restorecon /system/lib64/libdl_android.so
-    restorecon /system/lib64/libnetd_client.so
-    restorecon /system/lib64/libbinder.so
-    restorecon /system/lib64/libbinder_ndk.so
 
 # Xiaomi Pad 8 Pro host-touch stack.
 #
@@ -85,6 +86,31 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     wait /dev/block/mapper/odm${ro.boot.slot_suffix} 5
     mount erofs /dev/block/mapper/odm${ro.boot.slot_suffix} /vendor/piano-stock-odm ro
 
+    # Binder pair consistency.
+    #
+    # The stock vendor partition ships libbinder.so but NOT libbinder_ndk.so.
+    # With the stock path first on LD_LIBRARY_PATH the linker therefore takes
+    # libbinder.so from stock and libbinder_ndk.so from the recovery, pairing
+    # two different builds, and qseecomd dies loading its listener manager:
+    #
+    #   dlopen(libops.so) failed: cannot locate symbol
+    #     "_ZN7android6binder2os22get_trace_enabled_tagsEv"
+    #     referenced by "/system/lib64/libbinder_ndk.so"
+    #
+    # One symlink placed ahead of the stock path makes both halves come from
+    # the recovery build. Everything else still resolves from stock vendor.
+    # This is the TWRP16 equivalent of the TWRP14 binder-ABI finding, but it
+    # needs a single library rather than a compatibility island.
+    mkdir /vendor/piano-binder 0755 root root
+    mkdir /vendor/piano-binder/lib64 0755 root root
+    symlink /system/lib64/libbinder.so /vendor/piano-binder/lib64/libbinder.so
+
+    # Recovery-only /dev/block/bootdevice alias. Stock QSEE expects this path;
+    # recovery does not create it. Carried from the TWRP14 tree, where it was
+    # established as a real device requirement rather than a compatibility
+    # workaround.
+    symlink /dev/block/platform/soc/1d84000.ufshc /dev/block/bootdevice
+
 # Phase 4: stock Qualcomm TEE daemon.
 #
 # Packaged unmodified from HyperOS 3 (SHA-256
@@ -103,4 +129,4 @@ service vendor.qseecomd /vendor/bin/piano-qseecomd
     socket notify-topology stream 0660 system drmrpc
     disabled
     oneshot
-    setenv LD_LIBRARY_PATH /vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
