@@ -39,7 +39,9 @@ on boot
 on early-fs
     restorecon /system/etc/task_profiles.json
     restorecon_recursive /system/etc/vintf
+    restorecon /vendor/bin/piano-minkdaemon
     restorecon /vendor/bin/piano-ssgtzd
+    restorecon_recursive /vendor/etc/ssg
     restorecon /vendor/bin/piano-qseecomd
     restorecon /vendor/bin/hw/piano-keymint
     restorecon /vendor/bin/hw/piano-gatekeeper
@@ -154,6 +156,13 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
 
     start vendor.qseecomd
 
+    # The HLOS Mink opener. Xiaomi's Weaver does not go through QSEE at all:
+    # libmi_weaver -> libGPTEE_vendor -> libGPMTEEC_vendor -> libminksocket.
+    # Without this daemon serving the HLOSMINKD interface, the Weaver TA session
+    # cannot be opened and TWRP reports "Failed to get weaver key size" long
+    # before it looks at the credential.
+    start vendor.minkdaemon
+
 
 # The other three need qseecomd's listeners, which it announces itself. Chaining
 # on its own signal avoids a sleep, and each service still starts exactly once
@@ -162,6 +171,11 @@ on property:vendor.sys.listeners.registered=true
     start vendor.ssgtzd
     start vendor.keymint
     start vendor.gatekeeper_default
+
+# Weaver waits for the Mink opener's socket rather than for qseecomd's listeners:
+# its TA lives behind MiTEE, so the QSEE listeners say nothing about whether it
+# can be reached.
+on property:init.svc.vendor.minkdaemon=running
     start vendor.weaver
 
 # Phase 4: stock Qualcomm TEE daemon.
@@ -248,4 +262,23 @@ service vendor.ssgtzd /vendor/bin/piano-ssgtzd
     disabled
     socket ssgtzd stream 0660 system oem_2912
     socket ssgtzd_opener stream 0660 system system
+    setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64
+
+
+# Stock HLOS Mink daemon, the opener libGPMTEEC_vendor needs to reach a
+# GlobalPlatform TA through MiTEE.
+#
+# The socket name is the one the daemon looks for: it logs
+#   Did not find env var with sock fd for ANDROID_SOCKET_hlos_mink_opener
+#   Using file /dev/socket/hlos_mink_opener
+# and falls back to the file, so init creates it under that exact name.
+#
+# Runs in the tee domain like the other secure daemons — it is a client of the
+# same secure world.
+service vendor.minkdaemon /vendor/bin/piano-minkdaemon
+    class core
+    user system
+    group system drmrpc
+    disabled
+    socket hlos_mink_opener stream 0660 system drmrpc
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock/lib64:/vendor/piano-stock/lib64/hw:/system/lib64

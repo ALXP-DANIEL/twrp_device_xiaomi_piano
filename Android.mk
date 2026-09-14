@@ -100,3 +100,33 @@ LOCAL_MULTILIB := 64
 LOCAL_STRIP_MODULE := false
 LOCAL_CHECK_ELF_FILES := false
 include $(BUILD_PREBUILT)
+
+# Stock HyperOS 3 HLOS Mink daemon, packaged unmodified as
+# /vendor/bin/piano-minkdaemon.
+#
+# SHA-256 e8396f14435f7300847e74e05b326b3ebe4e328c33c9589573b602b5ec279efd
+#
+# This is the HLOS Mink opener. Xiaomi's Weaver reaches its trusted application
+# through MiTEE, not through QSEE: libmi_weaver -> libGPTEE_vendor ->
+# libGPMTEEC_vendor -> libminksocket_vendor. Without this daemon serving the
+# HLOSMINKD interface, libGPMTEEC_vendor cannot open the TA session and Weaver
+# fails with "openSession ret=11", so TWRP never reaches the credential.
+#
+# Found by way of MissMyTime/TWRP-Xiaomi, whose nezha notes record the same
+# failure - metadata decryption succeeding, then "failed while querying Weaver
+# key size" - and identify the HLOS Mink opener as the missing piece. Nothing in
+# this device's own logs names it.
+#
+# ELF dependency checking is disabled for the same reason as the others: it
+# links the stock vendor runtime, resolved from /vendor/piano-stock/lib64.
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_minkdaemon
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-minkdaemon
+LOCAL_SRC_FILES := prebuilt/hlosminkdaemon
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)

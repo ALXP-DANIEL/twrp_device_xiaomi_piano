@@ -132,6 +132,19 @@ BOARD_USES_METADATA_PARTITION := true
 # Partition mount points
 TARGET_COPY_OUT_VENDOR := vendor
 
+# /firmware must exist in the ramdisk for the modem bind mount to land.
+#
+# init mounts the modem partition read-only at /vendor/firmware_mnt and binds it
+# to /firmware, which is where Qualcomm's loader looks for GlobalPlatform TA
+# images. Without this the bind silently does nothing - mount reports success
+# against a missing directory - and Weaver's TA cannot be found:
+#
+#   GPMTEEC: [MTEEC.cpp:795 TEEC_MTEE_OpenSession] openSession() failed: 11
+#
+# Only "firmware" is created. /persist is deliberately NOT listed: this recovery
+# never mounts the real persist partition.
+BOARD_ROOT_EXTRA_FOLDERS := firmware
+
 # SELinux. Enforcing is a requirement, never relaxed to make a stage pass.
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
 

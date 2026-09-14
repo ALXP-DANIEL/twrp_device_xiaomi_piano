@@ -219,3 +219,54 @@ index bc2e7ea..ba1ab57 100644
      for (auto& device : user_devices) {
          LOG(DEBUG) << " - user devices: " << device;
      }
+diff --git a/Weaver1.cpp b/Weaver1.cpp
+index a2eeaaa..a0a4cf3 100644
+--- a/Weaver1.cpp
++++ b/Weaver1.cpp
+@@ -34,6 +34,7 @@
+ #include <aidl/android/hardware/weaver/IWeaver.h>
+ 
+ #include <iostream>
++#include <unistd.h>
+ #define ERROR 1
+ #define LOG(x) std::cout
+ 
+@@ -65,10 +66,34 @@ bool Weaver::GetConfig() {
+ 		return true;
+ 
+ 	if (mAidlDevice != nullptr) {
+-		auto r = mAidlDevice->getConfig(&aidlConfig);
+-		if (r.isOk()) {
+-			GottenConfig = true;
+-			return true;
++		// Retry, and require a non-zero config.
++		//
++		// Xiaomi's Weaver reaches its trusted application through MiTEE rather
++		// than QSEE, and that TA is loaded lazily: the first getConfig() lands
++		// while the secure world is still bringing it up. The call can fail
++		// outright, or return OK with a zeroed config, and a single attempt
++		// therefore reports "Failed to get weaver key size" and the credential
++		// is never checked.
++		//
++		// Waiting up to 20 seconds and insisting on keySize and valueSize being
++		// populated is the approach taken by MissMyTime/TWRP-Xiaomi, whose
++		// nezha notes describe this same failure on SM8750 hardware.
++		for (int attempt = 0; attempt < 80; attempt++) {
++			auto r = mAidlDevice->getConfig(&aidlConfig);
++			if (r.isOk() && aidlConfig.keySize > 0 && aidlConfig.valueSize > 0) {
++				LOG(ERROR) << "Weaver AIDL getConfig OK on attempt " << (attempt + 1)
++					   << " slots=" << aidlConfig.slots
++					   << " keySize=" << aidlConfig.keySize
++					   << " valueSize=" << aidlConfig.valueSize << "\n";
++				GottenConfig = true;
++				return true;
++			}
++			if (attempt == 0 || attempt == 19 || attempt == 39 || attempt == 79) {
++				LOG(ERROR) << "Weaver AIDL getConfig not ready on attempt " << (attempt + 1)
++					   << " keySize=" << aidlConfig.keySize
++					   << " valueSize=" << aidlConfig.valueSize << "\n";
++			}
++			usleep(250000);
+ 		}
+ 		return false;
+ 	}

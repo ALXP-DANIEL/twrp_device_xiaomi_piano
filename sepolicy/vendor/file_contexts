@@ -43,3 +43,7 @@
 # u:r:tee:s0, which already has the smcinvoke, DMA-heap, wakelock and UFS access
 # this daemon needs — it talks to the same secure world qseecomd does.
 /vendor/bin/piano-ssgtzd    u:object_r:tee_exec:s0
+
+# HLOS Mink opener. Same domain: it is a client of the same secure world, and
+# the tee domain already carries the smcinvoke and DMA-heap access it needs.
+/vendor/bin/piano-minkdaemon    u:object_r:tee_exec:s0
