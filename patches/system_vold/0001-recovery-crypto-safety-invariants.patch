@@ -158,6 +158,46 @@ index 54dd91c..d3c0ab8 100644
          // Continue on error.
      }
      s_deferred_fixations.clear();
+diff --git a/KeyStorage.cpp b/KeyStorage.cpp
+index be66f88..1e8f1ef 100644
+--- a/KeyStorage.cpp
++++ b/KeyStorage.cpp
+@@ -353,6 +353,35 @@ static KeystoreOperation BeginKeystoreOp(Keystore& keystore, const std::string&
+ //     }
+ 
+     auto opHandle = keystore.begin(blob, inParams, outParams);
++
++    // Fall back to the stock "key_back" blob.
++    //
++    // HyperOS keeps a second copy of the metadata key beside the live one, at
++    // <key_dir>/../key_back. On this device the two directories hold an
++    // IDENTICAL encrypted_key but DIFFERENT keymaster_key_blob, which is what a
++    // key upgrade leaves behind: the same wrapped payload re-bound under a new
++    // KeyMint blob. Either blob may therefore be the one this TEE state will
++    // open, and trying only the live one gives up a working key for no reason.
++    //
++    // This is read-only. Nothing in /metadata is written, renamed or deleted,
++    // and the live blob is left exactly as found even when the backup is the one
++    // that works.
++    if (!opHandle) {
++        auto backup_blob_file = dir + "/../key_back/" + kFn_keymaster_key_blob;
++        std::string backup_blob;
++        if (android::base::ReadFileToString(backup_blob_file, &backup_blob) &&
++            backup_blob != blob) {
++            LOG(WARNING) << "begin() failed on " << blob_file << "; trying the stock backup blob "
++                         << backup_blob_file << " read-only";
++            opHandle = keystore.begin(backup_blob, inParams, outParams);
++            if (opHandle) {
++                LOG(INFO) << "The stock backup blob opened; the live blob is left unchanged";
++            } else {
++                LOG(ERROR) << "The stock backup blob did not open either";
++            }
++        }
++    }
++
+     if (!opHandle) return opHandle;
+ 
+     // If key blob wasn't upgraded, nothing left to do.
 diff --git a/MetadataCrypt.cpp b/MetadataCrypt.cpp
 index bc2e7ea..ba1ab57 100644
 --- a/MetadataCrypt.cpp

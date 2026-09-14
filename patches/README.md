@@ -132,3 +132,21 @@ Result: `KEY_REQUIRES_UPGRADE` no longer occurs, and no key blob is rewritten â€
 which also satisfies the rule that key material must not be modified. Decryption
 still fails afterwards with `INCOMPATIBLE_BLOCK_MODE`; see
 docs/twrp16-migration-progress.md.
+
+## Read-only fallback to the stock `key_back` blob
+
+`BeginKeystoreOp()` retries with `<key_dir>/../key_back/keymaster_key_blob` when
+`begin()` fails on the live blob.
+
+HyperOS keeps a second copy of the metadata key beside the live one. On this
+device the two directories hold an identical `encrypted_key` and a different
+`keymaster_key_blob` â€” one wrapped payload re-bound under a new blob, which is
+what a key upgrade leaves behind. Either could be the one a given TEE state will
+open, so trying only the live one would give up a working key for nothing.
+
+It writes nothing: the backup is read, tried, and the live blob is left exactly
+as found even when the backup is the one that works.
+
+On this device both blobs fail identically with `INCOMPATIBLE_BLOCK_MODE`, so
+this is not the cause of the current failure. It is kept because the scenario it
+covers is real on a vendor that maintains that backup, and it costs one read.
