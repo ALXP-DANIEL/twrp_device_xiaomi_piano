@@ -1,0 +1,148 @@
+diff --git a/Decrypt.cpp b/Decrypt.cpp
+index a5a5ab5..a4bfd4d 100755
+--- a/Decrypt.cpp
++++ b/Decrypt.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include "Decrypt.h"
++#include <climits>
+ #include "FsCrypt.h"
+ #include <fscrypt/fscrypt.h>
+ 
+@@ -34,6 +35,7 @@
+ #include <openssl/sha.h>
+ #include <openssl/aes.h>
+ #include <openssl/evp.h>
++#include <openssl/crypto.h>
+ #include <openssl/rand.h>
+ 
+ #include <dirent.h>
+@@ -429,13 +431,28 @@ bool Get_Weaver_Data(const std::string& spblob_path, const std::string& handle_s
+ 		return found_file;
+ 	} else {
+ 		// output_hex(weaver_data.data(), weaver_data.size());printf("\n");
+-		const unsigned char* byteptr = (const unsigned char*)weaver_data.data();
+-		wd->version = *byteptr;
+-		// printf("weaver version %i\n", wd->version);
+-		const int* intptr = (const int*)weaver_data.data() + sizeof(unsigned char);
+-		wd->slot = *intptr;
+-		//endianswap(&wd->slot); not needed
+-		// printf("weaver slot %i\n", wd->slot);
++		// Android writes one version byte followed by a big-endian uint32
++		// slot (SyntheticPasswordManager uses DataOutputStream.writeInt, and
++		// ByteBuffer defaults to big endian).
++		//
++		// The previous expression was (const int*)data + sizeof(unsigned char),
++		// which is pointer arithmetic on int* and therefore advances FOUR
++		// bytes: it read 4 bytes at offset 4 of a 5-byte buffer, one byte out
++		// of bounds, and returned the wrong value in the wrong byte order.
++		if (weaver_data.size() != 5) {
++			printf("Invalid Weaver record length\n");
++			return false;
++		}
++		const unsigned char* bytes = (const unsigned char*)weaver_data.data();
++		if (bytes[0] != 1) {
++			printf("Unsupported Weaver record version\n");
++			return false;
++		}
++		const uint32_t slot = ((uint32_t)bytes[1] << 24) | ((uint32_t)bytes[2] << 16) |
++		                      ((uint32_t)bytes[3] << 8)  |  (uint32_t)bytes[4];
++		if (slot > INT_MAX) return false;
++		wd->version = bytes[0];
++		wd->slot = (int)slot;
+ 	}
+ 	return found_file;
+ }
+@@ -676,17 +693,35 @@ namespace keystore {
+ 			EVP_CIPHER_CTX *d_ctx = EVP_CIPHER_CTX_new();
+ 			const unsigned char* key = (const unsigned char*)personalized_application_id; // The key is the now personalized copy of the application ID
+ 			// printf("key: "); output_hex((const unsigned char*)key, 32); printf("\n");
+-			EVP_DecryptInit(d_ctx, EVP_aes_256_gcm(), key, intermediate_iv);
++			// The previous code was not authenticated at all: it set the GCM
++			// tag from an UNINITIALISED stack buffer, passed cipher_size
++			// (which includes the trailing 16-byte tag) as ciphertext length,
++			// and discarded the EVP_DecryptFinal_ex result. Any ciphertext
++			// would "decrypt".
++			const int plaintext_capacity = cipher_size - 16;
+ 			unsigned char* secret_key = (unsigned char*)malloc(cipher_size);
+-			if (!secret_key) {
++			if (!d_ctx || !secret_key) {
++				EVP_CIPHER_CTX_free(d_ctx);
++				free(secret_key);
+ 				printf("malloc failure on secret key\n");
+ 				return disk_decryption_secret_key;
+ 			}
+-			EVP_DecryptUpdate(d_ctx, secret_key, &actual_size, intermediate_cipher_text, cipher_size);
+-			unsigned char tag[AES_BLOCK_SIZE];
+-			EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16, tag);
+-			EVP_DecryptFinal_ex(d_ctx, secret_key + actual_size, &final_size);
++			const bool authenticated =
++				EVP_DecryptInit_ex(d_ctx, EVP_aes_256_gcm(), nullptr, key, intermediate_iv) == 1 &&
++				EVP_DecryptUpdate(d_ctx, secret_key, &actual_size, intermediate_cipher_text,
++				                  plaintext_capacity) == 1 &&
++				EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16,
++				                   (void*)(intermediate_cipher_text + plaintext_capacity)) == 1 &&
++				EVP_DecryptFinal_ex(d_ctx, secret_key + actual_size, &final_size) == 1;
+ 			EVP_CIPHER_CTX_free(d_ctx);
++			if (!authenticated) {
++				OPENSSL_cleanse(secret_key, cipher_size);
++				free(secret_key);
++				free(personalized_application_id);
++				free(keystore_result);
++				printf("Synthetic password authentication failed\n");
++				return disk_decryption_secret_key;
++			}
+ 			free(personalized_application_id);
+ 			free(keystore_result);
+ 			int secret_key_real_size = actual_size - 16;
+diff --git a/FsCrypt.cpp b/FsCrypt.cpp
+index 54dd91c..84132c0 100644
+--- a/FsCrypt.cpp
++++ b/FsCrypt.cpp
+@@ -884,8 +884,12 @@ bool fscrypt_set_ce_key_protection(userid_t user_id, const std::string& secret_h
+         LOG(INFO) << "Deferring fixation of " << directory_path << " until checkpoint is committed";
+         s_deferred_fixations[directory_path] = ce_key_path;
+     } else {
++        // Fixation deletes every other on-disk binding of this key. Recovery
++        // must never erase existing key material: only the in-memory key is
++        // needed, and a failed attempt must leave the user's protectors
++        // exactly as they were.
+         s_deferred_fixations.erase(directory_path);
+-        if (!fixate_user_ce_key(directory_path, ce_key_path, paths)) return false;
++        LOG(INFO) << "Skipping CE key fixation: recovery never deletes key material";
+     }
+ 
+     if (s_new_ce_keys.erase(user_id)) {
+@@ -898,8 +902,8 @@ void fscrypt_deferred_fixate_ce_keys() {
+     for (const auto& it : s_deferred_fixations) {
+         const auto& directory_path = it.first;
+         const auto& to_fix = it.second;
+-        LOG(INFO) << "Doing deferred fixation of " << directory_path;
+-        fixate_user_ce_key(directory_path, to_fix, get_ce_key_paths(directory_path));
++        LOG(INFO) << "Skipping deferred fixation of " << directory_path
++                  << ": recovery never deletes key material";
+         // Continue on error.
+     }
+     s_deferred_fixations.clear();
+diff --git a/MetadataCrypt.cpp b/MetadataCrypt.cpp
+index bc2e7ea..ba1ab57 100644
+--- a/MetadataCrypt.cpp
++++ b/MetadataCrypt.cpp
+@@ -291,6 +291,16 @@ bool fscrypt_mount_metadata_encrypted(const std::string& blk_device, const std::
+                << fs_type << " block device: " << blk_device << " with zoned " << is_zoned
+                << " length: " << length;
+ 
++    // Recovery is existing-data-only. Encrypting or formatting userdata from
++    // here destroys the very data the user is trying to reach, so both are
++    // refused unconditionally rather than trusting every caller to pass the
++    // right flags. This makes encrypt_inplace and f2fs::Format unreachable.
++    if (needs_encrypt || should_format) {
++        LOG(ERROR) << "fscrypt_mount_metadata_encrypted: refusing to encrypt or format "
++                   << mount_point << " in recovery";
++        return false;
++    }
++
+     for (auto& device : user_devices) {
+         LOG(DEBUG) << " - user devices: " << device;
+     }
