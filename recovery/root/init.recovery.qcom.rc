@@ -115,6 +115,31 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # workaround.
     symlink /dev/block/platform/soc/1d84000.ufshc /dev/block/bootdevice
 
+    # Secure stack start-up.
+    #
+    # These were started by hand through the Phase 4-7 bring-up. That stopped
+    # being workable once crypto was enabled: metadata decryption happens inside
+    # TWRP's Setup_Fstab_Partitions(), and on a clean boot KeyMint was simply not
+    # running when it was asked for the key -
+    #   Service android.hardware.security.keymint.IKeyMintDevice/default didn't start
+    #   keystore2: failed to get interface ... Retry 4/5: NAME_NOT_FOUND
+    # so decryption failed for want of a HAL rather than for any crypto reason.
+    #
+    # qseecomd is started here, at the END of this block, and not earlier: it
+    # needs the stock vendor mount AND the binder symlink above. Started before
+    # the symlink exists it loads stock's libbinder against the recovery's
+    # libbinder_ndk and dies immediately, leaving init.svc.vendor.qseecomd
+    # "stopped" with no listeners.
+    start vendor.qseecomd
+
+# The other three need qseecomd's listeners, which it announces itself. Chaining
+# on its own signal avoids a sleep, and each service still starts exactly once
+# because they remain "disabled" and nothing else starts them.
+on property:vendor.sys.listeners.registered=true
+    start vendor.keymint
+    start vendor.gatekeeper_default
+    start vendor.weaver
+
 # Phase 4: stock Qualcomm TEE daemon.
 #
 # Packaged unmodified from HyperOS 3 (SHA-256
@@ -124,8 +149,8 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
 # If an exact missing symbol proves otherwise, that evidence justifies adding
 # one library, not a wholesale port of the TWRP14 stack.
 #
-# Disabled deliberately. Started manually, exactly once per recovery boot:
-#     setprop ctl.start vendor.qseecomd
+# Kept "disabled" so that only the vendor.piano.stock.mounted trigger above
+# starts it, exactly once per recovery boot, after the stock vendor mount.
 service vendor.qseecomd /vendor/bin/piano-qseecomd
     class core
     user root
@@ -140,8 +165,9 @@ service vendor.qseecomd /vendor/bin/piano-qseecomd
 #
 # One process hosts IKeyMintDevice, IRemotelyProvisionedComponent,
 # ISecureClock and ISharedSecret. It needs the stock vendor mount and a
-# running qseecomd, so it stays disabled and is started manually during
-# bring-up with: setprop ctl.start vendor.keymint
+# running qseecomd, so it stays "disabled" and is started by the
+# vendor.sys.listeners.registered trigger above, which is qseecomd's own
+# announcement that its listeners are up.
 #
 # Same LD_LIBRARY_PATH as qseecomd, including the binder symlink directory:
 # this binary links libbinder_ndk too, so the pair must match for the same
@@ -157,9 +183,8 @@ service vendor.keymint /vendor/bin/hw/piano-keymint
 # Phase 6: stock piano Gatekeeper HAL.
 #
 # Stock enables this when vendor.gatekeeper.is_security_level_spu=0, which
-# init sets above. Disabled during bring-up and started manually only after
-# QSEE listeners are confirmed healthy:
-#     setprop ctl.start vendor.gatekeeper_default
+# init sets above. Started only after QSEE listeners are confirmed healthy, by
+# the vendor.sys.listeners.registered trigger.
 service vendor.gatekeeper_default /vendor/bin/hw/piano-gatekeeper
     class early_hal
     user system
@@ -169,9 +194,8 @@ service vendor.gatekeeper_default /vendor/bin/hw/piano-gatekeeper
 
 # Phase 7: stock piano Xiaomi Weaver HAL.
 #
-# libmi_weaver.so is odm-private, hence the extra odm path. Disabled during
-# bring-up and started manually:
-#     setprop ctl.start vendor.weaver
+# libmi_weaver.so is odm-private, hence the extra odm path. Started by the
+# vendor.sys.listeners.registered trigger, like the other two.
 service vendor.weaver /vendor/bin/hw/piano-weaver
     class hal
     user system
