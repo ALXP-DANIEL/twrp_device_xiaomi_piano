@@ -38,6 +38,7 @@ on boot
 # becomes invisible - including the ones raised by servicemanager.
 on early-fs
     restorecon /system/etc/task_profiles.json
+    restorecon_recursive /system/etc/vintf
     restorecon /vendor/bin/piano-qseecomd
     restorecon /vendor/bin/hw/piano-keymint
 

@@ -1,7 +1,17 @@
 <!--
     Recovery device VINTF manifest.
 
-    TWRP ships no VINTF manifest, so servicemanager reports
+    MUST live at /system/etc/vintf/manifest.xml, not /vendor/etc/vintf/.
+    In recovery, servicemanager resolves the manifest through
+    VintfObjectRecovery::fetchRecoveryHalManifest(), whose comment reads
+    "All manifests are installed under /system/etc/vintf" and which reads
+    kSystemManifest plus the kSystemManifestFragmentDir fragments. A manifest
+    placed under /vendor/etc/vintf is silently ignored: servicemanager logs
+    "getRecoveryHalManifest: Successfully processed VINTF information" for the
+    empty result, then rejects every addService() with
+    "Could not find <interface> in the VINTF manifest".
+
+    TWRP ships no VINTF manifest, so without this file servicemanager reports
     "NULL VINTF MANIFEST!" and client lookups such as
     AServiceManager_isDeclared() fail. Only the secure services this recovery
     actually runs are declared.

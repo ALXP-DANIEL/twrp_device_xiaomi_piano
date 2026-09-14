@@ -53,6 +53,10 @@ INERT_OBJECTS = {
 # only valid while every missing library is confirmed present in the stock
 # vendor image, which is checked on device during Phase 3/4 validation.
 RUNTIME_MOUNT_OBJECTS = {
+    "vendor/bin/hw/piano-keymint":
+        "links the stock QTI KeyMint runtime (libqtikeymint, "
+        "android.hardware.keymaster@4.0), resolved from /vendor/piano-stock/"
+        "lib64. Both verified present in the stock vendor partition.",
     "vendor/bin/piano-qseecomd":
         "links the stock vendor runtime (libQSEEComAPI, libminkdescriptor, "
         "libdrmfs, libdmabufheap), resolved from /vendor/piano-stock/lib64 "
