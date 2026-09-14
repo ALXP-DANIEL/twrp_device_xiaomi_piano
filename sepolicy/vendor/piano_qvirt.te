@@ -48,3 +48,25 @@ allow piano_qvirt loop_device:blk_file { ioctl read write open getattr };
 # Its config file and the two disk images.
 allow piano_qvirt vendor_configs_file:file { read getattr open map };
 allow piano_qvirt vendor_configs_file:dir { search getattr open read };
+
+# RUNTIME AVC EVIDENCE (2026-09-15). Four denials from the first boot on which
+# the service stayed alive long enough to do any work. It now reports
+# "Virtualization service registered" and "autostarthandler: Launching
+# trustedvm", so everything below is what the launch path itself needs.
+
+# It opens a uevent listener to learn when VM devices appear:
+#   E qvirtservice: uevent_open_socket() failed
+#   avc: denied { create } scontext=u:r:piano_qvirt:s0
+#        tclass=netlink_kobject_uevent_socket
+allow piano_qvirt self:netlink_kobject_uevent_socket { create read write bind getattr setopt getopt };
+
+# It reads sys.boot_completed to decide whether the HLOS is far enough along to
+# bring VMs up. In recovery the property never becomes 1, which is fine -- the
+# read simply has to be allowed rather than denied.
+#   avc: denied { read } name="u:object_r:boot_status_prop:s0"
+get_prop(piano_qvirt, boot_status_prop)
+
+# It publishes per-VM status as vendor.qvirtmgr.<name>.status, which requires
+# talking to the property service at all:
+#   avc: denied { write } name="property_service" tclass=sock_file
+set_prop(piano_qvirt, vendor_piano_qvirt_prop)

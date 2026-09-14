@@ -57,6 +57,25 @@ on early-fs
     # Listing individual libraries is guesswork - the set is whatever the stock
     # binaries happen to need. Relabel the directories wholesale instead.
     restorecon_recursive /system/bin
+
+    # Packaged vendor binaries, for the same reason and one of its own.
+    #
+    # Labels in the recovery ramdisk are written at pack time, and a newly
+    # added file_contexts entry does not always reach the cpio: the stock
+    # virtualization service shipped as u:object_r:rootfs:s0 even though
+    # /vendor/bin/piano-qvirt-service is labelled piano_qvirt_exec in every
+    # generated file_contexts, including the one on the device. init then
+    # refuses to start it outright:
+    #
+    #   Could not start service: File /vendor/bin/piano-qvirt-service
+    #   (labeled "u:object_r:rootfs:s0") has incorrect label or no domain
+    #   transition from u:r:init:s0 to another SELinux domain defined.
+    #
+    # Relabelling from the running policy makes the label deterministic
+    # regardless of what the packer did, and covers every future prebuilt.
+    restorecon_recursive /vendor/bin
+    restorecon_recursive /vendor/lib64
+    restorecon_recursive /vendor/etc
     restorecon_recursive /system/lib64
     restorecon /system/etc/ld.config.txt
 
