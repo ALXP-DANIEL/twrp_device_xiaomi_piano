@@ -190,7 +190,49 @@ TW_EXCLUDE_APEX := true
 TARGET_USES_LOGD := true
 TWRP_INCLUDE_LOGCAT := true
 
-# Crypto is intentionally OFF for the first image. Do not enable until the
-# Phase 7S safety invariants have been ported and verified against this
-# tree's system/vold revision, and until the image still fits the size budget
-# above. See docs/twrp16-migration-progress.md.
+# Crypto.
+#
+# Enabled. This is the point of the migration: TWRP14 with TW_INCLUDE_CRYPTO
+# returned to fastboot immediately, which is the failure that motivated moving
+# to the Android-16 base. TWRP16 with crypto boots, runs, and reaches its
+# decrypt UI, with SELinux Enforcing and the stock secure HALs registered.
+#
+# Proven on hardware at 31,265,294 bytes compressed - 2,054,984 above the bound
+# the TWRP14 tree measured. That bound was recorded as a property of the
+# bootloader; it is not one. Nothing is pruned to make this fit.
+#
+# The Phase 7S vold safety invariants are compiled in (see patches/). They are
+# not yet exercised at runtime.
+TW_INCLUDE_CRYPTO := true
+TW_INCLUDE_CRYPTO_FBE := true
+TW_INCLUDE_FBE_METADATA_DECRYPT := true
+
+# OS version and security patch level.
+#
+# KeyMint binds keys to these. The recovery ships the AOSP defaults
+# (security patch 2025-06-05), while this firmware reports 2026-07-01 for system
+# and 2026-02-01 for vendor. With the defaults in place, metadata decryption
+# failed: KeyMint answered begin() with -62 KEY_REQUIRES_UPGRADE and the
+# following upgradeKey() failed with -8, so /data could not be decrypted.
+#
+# The values are read from the device's own build.prop at runtime rather than
+# written here, so they stay correct if the firmware is updated. See the
+# override_system_props() patch in patches/bootable_recovery/ for why the
+# upstream call site is too late.
+#
+# Letting the key be used as-is is also the non-destructive outcome: an
+# upgradeKey() that succeeded would rewrite the key blob in /metadata.
+# TW_OVERRIDE_SYSTEM_PROPS is deliberately NOT used.
+#
+# twrp_recovery_defaults.go emits it as -DTW_OVERRIDE_SYSTEM_PROPS=%s with no
+# quotes, unlike the neighbouring string flags which use ="%s". An unquoted
+# value makes the compiler read a bare identifier:
+#   twrp.cpp:148:30: error: use of undeclared identifier 'ro'
+# and quoting it in make breaks Soong instead, because the value is written into
+# soong.<product>.variables as JSON:
+#   did not parse correctly: invalid character 'r' after object key:value pair
+#
+# The property list therefore lives in override_system_props() in twrp.cpp. Only
+# the property NAMES are written there; every VALUE is still read from the
+# device's own build.prop at runtime.
+TW_INCLUDE_LIBRESETPROP := true

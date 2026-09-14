@@ -31,10 +31,22 @@ set -euo pipefail
 
 ROOT="${1:?usage: piano16-ramdisk-prune.sh <TARGET_RECOVERY_ROOT_OUT>}"
 
-# ICU.
+# ICU — REMOVED FROM THE PRUNE LIST. Kept here as a record of why.
 #
-# libandroidicu.so, libicui18n.so and libicuuc.so total 4,856,688 bytes
-# uncompressed (~2.16 MB compressed) and nothing in the recovery uses them.
+# This was pruned on the evidence of the no-crypto build, where nothing in the
+# image references ICU. That evidence does not survive TW_INCLUDE_CRYPTO:
+# system/bin/recovery then names libandroidicu.so in DT_NEEDED directly, and
+# the crypto image died with
+#   CANNOT LINK EXECUTABLE "/system/bin/recovery":
+#     library "libandroidicu.so" not found: needed by main executable
+# after init had already started, leaving the device in fastboot.
+#
+# The list below is therefore a proposal, and piano16-prune-verify.py is the
+# authority: it recomputes the evidence from the tree actually being packed and
+# fails the build if any listed file is still referenced.
+#
+# Historical note on the measurement: with ICU removed the no-crypto image was
+# 26,721,747 bytes compressed, against 28,964,896 with it.
 #
 # They are installed because recovery, libxml2, libsqlite and libkeystoreinfo
 # each depend on libandroidicu at build time — but on libandroidicu_static, the
@@ -48,13 +60,48 @@ ROOT="${1:?usage: piano16-ramdisk-prune.sh <TARGET_RECOVERY_ROOT_OUT>}"
 # and a string scan of every file under /system/bin, /system/lib64,
 # /vendor/lib64, /vendor/bin and /odm/lib64 matched only the three libraries
 # themselves.
-PRUNE=(
-    system/lib64/libandroidicu.so
-    system/lib64/libicui18n.so
-    system/lib64/libicuuc.so
-)
+PRUNE=()
+
+# Group 2 — MEASURED, THEN FOUND UNNECESSARY. Retained as a record.
+#
+# These were established dead the same three ways as ICU and were about to be
+# removed to make crypto fit. Then the premise collapsed: the size ceiling the
+# pruning existed to satisfy turned out not to apply to TWRP16 at all. A
+# 31,265,294-byte image - 2,054,984 above the bound measured on TWRP14 - boots
+# fully into TWRP with crypto enabled. See docs/twrp16-test-matrix.md.
+#
+# So nothing is pruned. Removing working code to solve a constraint that does
+# not bind would be pure risk. The list below stays only so the analysis is not
+# lost if a real ceiling is ever found:
+#
+#   system/lib64/libadbd_services.so   2,115,944   nothing references it
+#   system/lib64/libcutils_sockets.so    102,184   only libadbd_services does
+#   system/lib64/libxml2.so            1,175,936   unmapped while servicemanager
+#                                                  parsed the VINTF manifests
+#   system/lib64/libperfetto_c.so        883,896   tracing has no consumer
+#   system/bin/keystore_cli_v2           121,040   inert, no .rc starts it
+#   system/lib64/libchrome.so          1,243,064   only keystore_cli_v2 names it
+#   system/lib64/libevent.so             332,592   only reachable via libchrome
+#   system/lib64/libnl.so                269,840   no consumer
+#
+# Any future use of this list must go through piano16-prune-verify.py, which
+# recomputes the evidence against the tree being packed. The ICU note above
+# explains why a static list is not trustworthy on its own.
+
+
 
 echo "----- Pruning dead payload from recovery ramdisk ------"
+
+if [ ${#PRUNE[@]} -eq 0 ]; then
+    echo "  prune list empty, nothing to do"
+    exit 0
+fi
+
+# Verify before deleting. This must not be skipped: the list is written from
+# an analysis of one build, and a configuration change can invalidate it
+# silently. See the ICU note above for the failure that made this mandatory.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$HERE/piano16-prune-verify.py" "$ROOT" "${PRUNE[@]}"
 
 freed=0
 for rel in "${PRUNE[@]}"; do

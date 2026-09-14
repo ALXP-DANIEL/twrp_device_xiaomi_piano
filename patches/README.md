@@ -104,3 +104,31 @@ deliberately, with the recovery-specific reasoning written down at that point.
 
 The patch has not yet been exercised at runtime — crypto is still off, so none
 of these paths execute. It is compiled, not proven.
+
+## bootable_recovery/0001-align-os-props-before-metadata-decrypt.patch
+
+Adds `piano_align_os_props()` to `twrp.cpp` and calls it before
+`Setup_Fstab_Partitions()`, under `TW_INCLUDE_CRYPTO`.
+
+KeyMint binds keys to the OS version and security patch level. The recovery
+shipped the AOSP defaults — security patch 2025-06-05, and no
+`ro.vendor.build.security_patch` at all — while this firmware reports 2026-07-01
+for system and 2026-02-01 for vendor. Metadata decryption therefore failed with
+`-62 KEY_REQUIRES_UPGRADE`, and the `upgradeKey()` that followed failed with `-8`.
+
+The function reads each value from the device's own `build.prop` and overrides
+the recovery's, so the numbers are not written into the tree and stay correct if
+the firmware is updated. It maps the logical partitions it needs itself, because
+`Setup_Fstab_Partitions()` has not run yet.
+
+Why not upstream's `TW_OVERRIDE_SYSTEM_PROPS`: it runs from
+`process_recovery_mode()`, after `Setup_Fstab_Partitions()`, so it cannot affect
+decryption. It is also unusable on this tree — `twrp_recovery_defaults.go` emits
+it as `-DTW_OVERRIDE_SYSTEM_PROPS=%s` with no quotes, unlike its neighbours which
+use `="%s"`. Unquoted, the compiler reads a bare identifier; quoted, the value
+corrupts Soong's JSON variables file.
+
+Result: `KEY_REQUIRES_UPGRADE` no longer occurs, and no key blob is rewritten —
+which also satisfies the rule that key material must not be modified. Decryption
+still fails afterwards with `INCOMPATIBLE_BLOCK_MODE`; see
+docs/twrp16-migration-progress.md.

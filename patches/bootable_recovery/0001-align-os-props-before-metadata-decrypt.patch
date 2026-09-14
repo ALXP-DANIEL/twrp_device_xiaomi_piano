@@ -1,0 +1,86 @@
+diff --git a/twrp.cpp b/twrp.cpp
+index 18ad85b..03fe427 100644
+--- a/twrp.cpp
++++ b/twrp.cpp
+@@ -121,6 +121,68 @@ static void process_fastbootd_mode() {
+ 		}
+ }
+ 
++// Aligns the recovery's OS version and security patch level with the ROM before
++// anything asks KeyMint for a key.
++//
++// KeyMint binds keys to these values. The recovery ships the AOSP defaults -
++// security patch 2025-06-05 - while this firmware reports 2026-07-01 for system
++// and 2026-02-01 for vendor. With the defaults in place, metadata decryption in
++// Setup_Fstab_Partitions() failed: KeyMint answered begin() with -62
++// KEY_REQUIRES_UPGRADE and the following upgradeKey() failed with -8, so /data
++// could not be decrypted.
++//
++// Letting the key be used as-is is also the non-destructive outcome. An
++// upgradeKey() that succeeded would rewrite the key blob in /metadata; matching
++// the patch level means no upgrade is requested at all.
++//
++// Upstream has TW_OVERRIDE_SYSTEM_PROPS for this, but it runs from
++// process_recovery_mode(), which is after Setup_Fstab_Partitions() - too late to
++// affect decryption. That macro is also unusable here: twrp_recovery_defaults.go
++// emits it unquoted, and quoting it in make corrupts Soong's JSON variables file.
++// So the property names live here instead. Only the names are written down; every
++// value is read from the device's own build.prop at runtime, which keeps them
++// correct if the firmware is updated.
++static void piano_align_os_props() {
++	struct { const char *prop; const char *partition; } const overrides[] = {
++		{"ro.build.version.security_patch", nullptr},
++		{"ro.build.version.release",        nullptr},
++		{"ro.build.version.sdk",            nullptr},
++		{"ro.vendor.build.security_patch",  "/vendor"},
++	};
++
++	std::string android_root = PartitionManager.Get_Android_Root_Path();
++
++	for (auto&& o : overrides) {
++		std::string mount_point = o.partition ? o.partition : android_root;
++
++		// Setup_Fstab_Partitions() has not run yet, so the logical partitions
++		// holding build.prop are not mapped. Map them the same way the fastboot
++		// path does.
++		TWPartition *part = PartitionManager.Find_Partition_By_Path(mount_point);
++		if (part) PartitionManager.Prepare_Super_Volume(part);
++
++		std::string value = TWFunc::Partition_Property_Get(o.prop, PartitionManager,
++		                                                   mount_point.c_str(), "build.prop");
++		if (value.empty()) {
++			LOGINFO("piano: %s not found in %s/build.prop, leaving recovery value\n",
++			        o.prop, mount_point.c_str());
++		} else {
++			std::string current = android::base::GetProperty(o.prop, "");
++			if (current == value) {
++				LOGINFO("piano: %s already matches the ROM (\"%s\")\n", o.prop, value.c_str());
++			} else {
++				int error = TWFunc::Property_Override(o.prop, value);
++				if (error)
++					LOGERR("piano: failed overriding %s, error_code: %d\n", o.prop, error);
++				else
++					LOGINFO("piano: %s \"%s\" -> \"%s\" from %s/build.prop\n",
++					        o.prop, current.c_str(), value.c_str(), mount_point.c_str());
++			}
++		}
++		PartitionManager.UnMount_By_Path(mount_point, false);
++	}
++}
++
+ static void process_recovery_mode(twrpAdbBuFifo* adb_bu_fifo, bool skip_decryption) {
+ 	char crash_prop_val[PROPERTY_VALUE_MAX];
+ 	int crash_counter;
+@@ -397,6 +459,12 @@ int main(int argc, char **argv) {
+ 	printf("Starting the UI...\n");
+ 	gui_init();
+ 
++	// Must precede Setup_Fstab_Partitions(): metadata decryption happens there and
++	// needs the OS version and patch level to match the ROM. See piano_align_os_props().
++#ifdef TW_INCLUDE_CRYPTO
++	if (!startup.Get_Fastboot_Mode()) piano_align_os_props();
++#endif
++
+ 	if (!startup.Get_Fastboot_Mode()) PartitionManager.Setup_Fstab_Partitions(true);
+ 
+ 	if (TWFunc::get_log_dir() == DATA_LOGS_DIR && !TWFunc::Path_Exists(DATA_LOGS_DIR))

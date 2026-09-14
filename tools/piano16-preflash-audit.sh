@@ -15,12 +15,28 @@ set -u
 IMG=${1:-}
 [ -n "$IMG" ] && [ -f "$IMG" ] || { echo "usage: $0 <recovery.img>" >&2; exit 2; }
 
-# Measured on hardware, see docs/twrp14-frozen-reference.md.
-#   29,210,310 bytes boots (stock HOS3 Global ramdisk)
-#   29,228,841 bytes fails
-# Budget below the proven-good bound to keep margin.
-CEILING=29210310
-BUDGET=29000000
+# Size limits.
+#
+# The TWRP14 tree measured a hard bound by flashing: 29,210,310 bytes booted,
+# 29,228,841 did not. That bound was recorded as a property of the bootloader.
+# It is not one. Two TWRP16 images above it have since been flashed to
+# recovery_a and both loaded, the larger of the two booting fully into TWRP
+# with crypto enabled:
+#
+#   31,403,528  loaded, init ran, adbd came up (recovery then hit a link error)
+#   31,265,294  boots into TWRP, crypto enabled, UI up
+#
+# So the old figure is not a limit for images of this shape, and the true
+# ceiling is unmeasured. This gate therefore asserts only what is known:
+#
+#   - above the largest image proven to boot, warn. It may well be fine; we
+#     have no evidence either way, and refusing to build would be a guess
+#     dressed as a rule.
+#   - above the partition, fail. That one is arithmetic.
+#
+# Raise PROVEN_BOOT when a larger image is confirmed to boot on hardware, and
+# only then.
+PROVEN_BOOT=31265294
 PART_SIZE=104857600
 
 pass=0; fail=0
@@ -69,17 +85,16 @@ echo
 [ "$FILESZ" -le "$PART_SIZE" ] && ok "image fits 100 MiB partition" \
                                || bad "image $FILESZ exceeds $PART_SIZE"
 
-# The decisive one.
-if [ "$RS" -le "$BUDGET" ]; then
-    ok "ramdisk $RS within budget $BUDGET (headroom $((BUDGET - RS)))"
-elif [ "$RS" -le "$CEILING" ]; then
-    printf '  \033[1;33mWARN\033[0m  ramdisk %s is over budget %s but under the proven bound %s\n' \
-        "$RS" "$BUDGET" "$CEILING"
-    printf '        margin is thin; the true ceiling lies within 18,531 bytes above it\n'
-    pass=$((pass+1))
+# Size.
+if [ "$RS" -le "$PROVEN_BOOT" ]; then
+    ok "ramdisk $RS at or below the largest image proven to boot ($PROVEN_BOOT)"
 else
-    bad "ramdisk $RS EXCEEDS the proven bound $CEILING by $((RS - CEILING)) — this image will NOT boot"
-    printf '        the bootloader rejects it outright and marks slot A unbootable\n'
+    printf '  \033[1;33mWARN\033[0m  ramdisk %s exceeds the largest proven-booting image %s by %s\n' \
+        "$RS" "$PROVEN_BOOT" "$((RS - PROVEN_BOOT))"
+    printf '        untested size. Flash to recovery_a only, and keep a known-good\n'
+    printf '        image to hand; if the bootloader rejects it the device returns\n'
+    printf '        to fastboot and slot A can be reset with: fastboot set_active a\n'
+    pass=$((pass+1))
 fi
 
 echo
