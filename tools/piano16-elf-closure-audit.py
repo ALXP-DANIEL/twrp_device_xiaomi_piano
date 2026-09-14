@@ -45,6 +45,20 @@ INERT_OBJECTS = {
         "arrive only with TW_INCLUDE_CRYPTO.",
 }
 
+# Objects whose dependencies are deliberately NOT packaged, because they are
+# resolved at runtime from the stock vendor partition mounted read-only at
+# /vendor/piano-stock. Their init service sets LD_LIBRARY_PATH accordingly.
+#
+# This is not the same as an inert object: these DO execute. The exception is
+# only valid while every missing library is confirmed present in the stock
+# vendor image, which is checked on device during Phase 3/4 validation.
+RUNTIME_MOUNT_OBJECTS = {
+    "vendor/bin/piano-qseecomd":
+        "links the stock vendor runtime (libQSEEComAPI, libminkdescriptor, "
+        "libdrmfs, libdmabufheap), resolved from /vendor/piano-stock/lib64 "
+        "which init mounts read-only. All four verified present on device.",
+}
+
 # Standard search order inside a recovery ramdisk.
 SEARCH_DIRS = [
     "system/lib64", "system/lib64/vndk-sp", "system/lib64/hw",
@@ -175,17 +189,20 @@ def main():
     # Split findings into accepted exceptions and real failures.
     excepted, real = {}, {}
     for lib, users in missing.items():
-        if all(u in INERT_OBJECTS for u in users):
+        allowed = set(INERT_OBJECTS) | set(RUNTIME_MOUNT_OBJECTS)
+        if all(u in allowed for u in users):
             excepted[lib] = users
         else:
-            real[lib] = [u for u in users if u not in INERT_OBJECTS]
+            real[lib] = [u for u in users if u not in allowed]
 
     if excepted:
         print("accepted exceptions: %d unresolved references, all from objects"
-              " that cannot execute" % len(excepted))
+              " that are inert or resolve from the stock vendor mount"
+              % len(excepted))
         for obj in sorted({u for us in excepted.values() for u in us}):
+            why = INERT_OBJECTS.get(obj) or RUNTIME_MOUNT_OBJECTS.get(obj)
             print("  %s" % obj)
-            print("      %s" % INERT_OBJECTS[obj])
+            print("      %s" % why)
         print()
 
     if not real:

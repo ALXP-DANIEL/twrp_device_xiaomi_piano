@@ -108,6 +108,11 @@ jobs:
           mkdir -p device/${{ inputs.DEVICE_PATH }}
           rsync -a --exclude '.git' --exclude '.github' \
             "$GITHUB_WORKSPACE/device_tree/" "device/${{ inputs.DEVICE_PATH }}/"
+          # The checkout sits inside the build root, so kati would parse its
+          # Android.mk a second time and fail with
+          #   error: device_tree: MODULE.TARGET.EXECUTABLES.piano_qseecomd
+          #          already defined by device/xiaomi/piano
+          rm -rf "$GITHUB_WORKSPACE/device_tree"
           ls -la device/${{ inputs.DEVICE_PATH }}
 
       - name: Build recovery

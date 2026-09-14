@@ -21,6 +21,37 @@ on property:ro.boot.usbcontroller=*
 on boot
     setprop sys.usb.config adb
 
+# Ramdisk files arrive labelled u:object_r:rootfs:s0. Apply the device
+# file_contexts so init can perform the domain transition into u:r:tee:s0 when
+# qseecomd is started; without this the binary stays rootfs-labelled and
+# "ctl.start vendor.qseecomd" fails with PROP_ERROR_HANDLE_CONTROL_MESSAGE.
+#
+# task_profiles.json is restored for the same reason it is packaged: recovery
+# ships cgroups.json but not task_profiles.json, so logd aborts in
+# libprocessgroup, logcat stays empty, and every userspace SELinux denial
+# becomes invisible - including the ones raised by servicemanager.
+on early-fs
+    restorecon /system/etc/task_profiles.json
+    restorecon /vendor/bin/piano-qseecomd
+
+    # The dynamic linker and core libraries must carry their real labels too.
+    # They are rootfs-labelled in the ramdisk, and u:r:tee:s0 cannot map a
+    # rootfs file, so qseecomd dies instantly:
+    #   avc: denied { map } path="/system/bin/linker64" scontext=u:r:tee:s0
+    #   Service 'vendor.qseecomd' received signal 11
+    restorecon /system/bin
+    restorecon /system/bin/linker64
+    restorecon /system/etc/ld.config.txt
+    restorecon /system/lib64
+    restorecon /system/lib64/libc.so
+    restorecon /system/lib64/libm.so
+    restorecon /system/lib64/libdl.so
+    restorecon /system/lib64/ld-android.so
+    restorecon /system/lib64/libdl_android.so
+    restorecon /system/lib64/libnetd_client.so
+    restorecon /system/lib64/libbinder.so
+    restorecon /system/lib64/libbinder_ndk.so
+
 # Xiaomi Pad 8 Pro host-touch stack.
 #
 # xiaomi_touch.ko must load before nt36532_touch.ko. The odm touch_report
