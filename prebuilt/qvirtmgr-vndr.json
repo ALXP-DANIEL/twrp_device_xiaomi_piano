@@ -13,8 +13,8 @@
                 "pre_boot_ops"  : "create",
                 "boot_ops"      : "start",
                 "disk" : [
-                    { "image"   : "/product/firmware/vm-system/system.img", "label" : 10, "read_write" : false },
-                    { "image"   : "/mnt/product/vm-persist/trustedvm/persist.img", "label" : 11, "read_write" : true }
+                    { "image"   : "/vendor/piano-stock-product/firmware/vm-system/system.img", "label" : 10, "read_write" : false },
+                    { "image"   : "/vendor/piano-stock-vmpersist/trustedvm/persist.img", "label" : 11, "read_write" : true }
                ],
                 "enable"        : true,
                 "autostart"     : true,

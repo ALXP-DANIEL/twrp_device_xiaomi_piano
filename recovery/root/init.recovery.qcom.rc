@@ -231,11 +231,21 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # and the failure will say plainly whether write access is really needed.
     # vm-persist is a different partition from persist and neither is written
     # here.
-    mkdir /product 0755 root root
-    mkdir /mnt/product 0755 root root
-    mkdir /mnt/product/vm-persist 0755 root root
+    # Mounted under /vendor, NOT at /product.
+    #
+    # TWRP manages the logical partitions itself and unmounts /product during
+    # its own partition setup, which silently removes the VM's root filesystem
+    # after init has mounted it. The symptom is an ENOENT with no context:
+    #
+    #   qcrosvm: Error parsing arguments InvalidValue {
+    #     value: "/product/firmware/vm-system/system.img,label=10,rw=false",
+    #     expected: "an existing file" }
+    #
+    # The packaged qvirtmgr-vndr.json is patched to match these paths, so the
+    # VM disks live somewhere TWRP has no reason to touch.
+    mkdir /vendor/piano-stock-product 0755 root root
     wait /dev/block/mapper/product${ro.boot.slot_suffix} 20
-    mount erofs /dev/block/mapper/product${ro.boot.slot_suffix} /product ro
+    mount erofs /dev/block/mapper/product${ro.boot.slot_suffix} /vendor/piano-stock-product ro
 
     # The virtualization service does not boot the VM itself. It forks
     # /system_ext/bin/qcrosvm, a crosvm-derived VMM, and that process opens the
@@ -261,8 +271,9 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mkdir /vendor/piano-stock-system 0755 root root
     wait /dev/block/mapper/system${ro.boot.slot_suffix} 20
     mount erofs /dev/block/mapper/system${ro.boot.slot_suffix} /vendor/piano-stock-system ro
-    wait /dev/block/by-name/vm-persist 5
-    mount ext4 /dev/block/by-name/vm-persist /mnt/product/vm-persist ro nosuid nodev noatime
+    mkdir /vendor/piano-stock-vmpersist 0755 root root
+    wait /dev/block/by-name/vm-persist 20
+    mount ext4 /dev/block/by-name/vm-persist /vendor/piano-stock-vmpersist ro nosuid nodev noatime
 
     start vendor.qseecomd
 
