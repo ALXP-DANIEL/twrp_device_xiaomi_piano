@@ -91,3 +91,50 @@ set_prop(piano_qvirt, vendor_piano_qvirt_prop)
 type vendor_qcrosvm_exec, exec_type, file_type;
 
 allow piano_qvirt vendor_qcrosvm_exec:file { read getattr open map execute execute_no_trans };
+
+# RUNTIME AVC EVIDENCE (2026-09-15). qcrosvm now runs. Three denials from its
+# first real execution, all in the path that opens the VM's disks.
+
+# The VM's root filesystem directory carries vendor_vm_qti_system_file on the
+# product partition, and the type was absent from the recovery policy, so it
+# resolved as unlabeled -- the third instance of this same defect, after
+# /data/vendor/tzstorage and /system_ext/bin/qcrosvm:
+#
+#   avc: denied { search } name="vm-system" dev="dm-1"
+#        tcontext=u:object_r:unlabeled:s0
+#        trawcon="u:object_r:vendor_vm_qti_system_file:s0"
+type vendor_vm_qti_system_file, file_type;
+
+allow piano_qvirt vendor_vm_qti_system_file:dir { search getattr open read };
+allow piano_qvirt vendor_vm_qti_system_file:file { read getattr open map lock ioctl };
+
+# It reads ungrouped system properties while setting the VM up.
+#   avc: denied { read } name="u:object_r:default_prop:s0"
+get_prop(piano_qvirt, default_prop)
+
+# DAC_OVERRIDE. qcrosvm opens the VM images and the Gunyah device while the
+# filesystem permissions on the stock mounts do not match the identity it runs
+# as. Stock grants this to its own VMM domain for the same reason.
+#   avc: denied { dac_override } capability=1
+allow piano_qvirt self:capability dac_override;
+
+# OBSERVED LABELS (2026-09-15). Not speculative: qvirtmgr-vndr.json names both
+# VM disks by absolute path, so qcrosvm must open both, and these are the
+# labels they actually carry on this device.
+#
+#   /mnt/product/vm-persist/trustedvm/persist.img  mnt_product_file
+#   /system_ext/etc/seccomp_policy/qcrosvm.policy  system_file
+#
+# The system.img on product is covered by vendor_vm_qti_system_file above.
+#
+# Write is granted on the persist image because the stock config marks it
+# "read_write": true. The partition is mounted read-only in this recovery, so
+# the filesystem refuses writes regardless of what the policy permits; the rule
+# is here so that, if read-only proves to be the blocker, the experiment is one
+# mount option rather than another build.
+allow piano_qvirt mnt_product_file:dir { search getattr open read };
+allow piano_qvirt mnt_product_file:file { read write getattr open map lock ioctl };
+
+# Its seccomp policy file, read at start-up.
+allow piano_qvirt system_file:file { read getattr open map };
+allow piano_qvirt system_file:dir { search getattr open read };

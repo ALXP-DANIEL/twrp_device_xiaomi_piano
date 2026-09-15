@@ -72,3 +72,6 @@
 # The crosvm-derived VMM that actually boots the trustedvm guest. It lives on
 # the stock system_ext partition, mounted read-only in recovery.
 /system_ext/bin/qcrosvm    u:object_r:vendor_qcrosvm_exec:s0
+
+# The trustedvm guest's root filesystem on the stock product partition.
+/product/firmware/vm-system(/.*)?    u:object_r:vendor_vm_qti_system_file:s0
