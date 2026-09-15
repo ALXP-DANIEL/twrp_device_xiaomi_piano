@@ -194,7 +194,14 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mkdir /vendor/piano-stock-dlkm 0755 root root
     wait /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} 5
     mount erofs /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} /vendor/piano-stock-dlkm ro
-    insmod /vendor/piano-stock-dlkm/lib/modules/mitee_dlkm.ko
+    # mitee_dlkm is deliberately NOT loaded here. It probes the secure world on
+    # load, and the trustedvm guest that hosts that secure world does not exist
+    # until roughly 19 seconds later. Loaded early it reports
+    #   mitee msgq: msgq didn't set up, try later
+    #   mitee smc notify connect failed
+    # and never retries, so Weaver fails every session with openSession ret=15
+    # even once the VM is running. It is loaded from the
+    # vendor.piano.vm.running trigger at the bottom of this file instead.
 
     # Stock persist, READ-ONLY.
     #
@@ -253,7 +260,12 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # fails and the only symptom is a launch that quietly does nothing.
     mkdir /system_ext 0755 root root
     wait /dev/block/mapper/system_ext${ro.boot.slot_suffix} 20
-    mount erofs /dev/block/mapper/system_ext${ro.boot.slot_suffix} /system_ext ro
+    # context= relabels the whole mount to a type this policy owns. qcrosvm and
+    # its seccomp policy both live here; the policy file carries system_file in
+    # its own xattrs, and a platform neverallow forbids a vendor domain from
+    # reading that type (domain.te:1238). Relabelling at mount time reaches it
+    # without widening policy, exactly as for the VM disks.
+    mount erofs /dev/block/mapper/system_ext${ro.boot.slot_suffix} /system_ext ro context=u:object_r:vendor_qcrosvm_exec:s0
 
     # Stock system, READ-ONLY.
     #
@@ -273,7 +285,12 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mount erofs /dev/block/mapper/system${ro.boot.slot_suffix} /vendor/piano-stock-system ro
     mkdir /vendor/piano-stock-vmpersist 0755 root root
     wait /dev/block/by-name/vm-persist 20
-    mount ext4 /dev/block/by-name/vm-persist /vendor/piano-stock-vmpersist ro nosuid nodev noatime
+    # context= overrides every label on the partition with one this policy
+    # owns. The persist image carries mnt_product_file in its own xattrs, and a
+    # platform neverallow forbids a vendor domain from touching that type, so
+    # relabelling at mount time is the only way to reach it without widening
+    # policy.
+    mount ext4 /dev/block/by-name/vm-persist /vendor/piano-stock-vmpersist ro nosuid nodev noatime context=u:object_r:vendor_vm_qti_system_file:s0
 
     start vendor.qseecomd
 
@@ -296,7 +313,62 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # This is a real precondition of the VM manager, not a test being forced to
     # pass. Nothing else in this recovery reads sys.boot_completed.
     setprop sys.boot_completed 1
+    # NOTE: stock /odm is deliberately NOT bound over /odm.
+    #
+    # firmware_class defaults to searching /odm/firmware/..., and an early
+    # version of this file bound the stock odm view there to satisfy it. That
+    # hides the recovery's OWN /odm, which carries the packaged touch stack --
+    # touch_report.rc and the touch libraries -- so the device booted to the
+    # TWRP splash with no UI and a load average above 11.
+    #
+    # It is unnecessary anyway: the guest's blobs are symlinked into the
+    # recovery's own /odm/firmware below, which the kernel already searches.
+
+    # vm-bootsys, which carries the guest's signed kernel.
+    #
+    # trustedvm.mdt and its .b00-.bNN segments live on this partition and
+    # nowhere else: they are not on system, vendor, odm, product, system_ext or
+    # modem. Without it the loader reports
+    #   Direct firmware load for trustedvm.mdt failed with error -2
+    # and the VM cannot be authenticated. The partition is mounted READ-ONLY
+    # and the firmware search path is pointed straight at the boot directory.
+    mkdir /vendor/piano-stock-vmboot 0755 root root
+    wait /dev/block/by-name/vm-bootsys${ro.boot.slot_suffix} 20
+    mount ext4 /dev/block/by-name/vm-bootsys${ro.boot.slot_suffix} /vendor/piano-stock-vmboot ro nosuid nodev noatime context=u:object_r:piano_vmboot_file:s0
+    # The guest's blobs are LINKED into /odm/firmware, which the kernel already
+    # searches, rather than repointing the firmware search path at them.
+    #
+    # firmware_class's path parameter REPLACES the search list, it does not
+    # extend it. Setting it to the vm-bootsys boot directory made the touch
+    # controller's own firmware unreachable:
+    #
+    #   NVT-ts spi0.0: Direct firmware load for
+    #     novatek_nt36532_piano_fw_boe.bin failed with error -2
+    #   TpFirmwareLoadFail,vendor_name:novatek
+    #
+    # The UI rendered but the panel never responded. Symlinks leave every other
+    # driver's firmware exactly where it was.
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.mdt /odm/firmware/trustedvm.mdt
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b00 /odm/firmware/trustedvm.b00
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b01 /odm/firmware/trustedvm.b01
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b02 /odm/firmware/trustedvm.b02
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b03 /odm/firmware/trustedvm.b03
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b04 /odm/firmware/trustedvm.b04
+
+    # The guest's persist image is opened READ-WRITE by qcrosvm
+    # ("read_write": true in qvirtmgr-vndr.json), but vm-persist is mounted
+    # read-only here and stays that way: nothing in this recovery writes to a
+    # real partition. A RAM copy on the ramdisk is handed to the VM instead, so
+    # guest writes land in memory and the partition is never touched. The copy
+    # is discarded at reboot, which is correct for recovery - no guest state
+    # from a recovery session should survive into the running system.
+    mkdir /vendor/piano-vm-rw 0700 root root
+    copy /vendor/piano-stock-vmpersist/trustedvm/persist.img /vendor/piano-vm-rw/persist.img
+    chmod 0600 /vendor/piano-vm-rw/persist.img
+    restorecon_recursive /vendor/piano-vm-rw
+
     start vendor.qvirtservice
+    start vendor.piano_vmwatch
 
 
 # The other three need qseecomd's listeners, which it announces itself. Chaining
@@ -310,8 +382,11 @@ on property:vendor.sys.listeners.registered=true
 # Weaver waits for the Mink opener's socket rather than for qseecomd's listeners:
 # its TA lives behind MiTEE, so the QSEE listeners say nothing about whether it
 # can be reached.
-on property:init.svc.vendor.minkdaemon=running
-    start vendor.weaver
+# Weaver is no longer started from the Mink daemon's signal. The Mink opener
+# being up says nothing about whether MiTEE can be reached: the TA lives inside
+# the trustedvm guest, and starting Weaver before that guest exists is exactly
+# what produced openSession ret=15. It now starts from the
+# vendor.piano.vm.running trigger at the bottom of this file.
 
 # Phase 4: stock Qualcomm TEE daemon.
 #
@@ -450,3 +525,30 @@ service vendor.qvirtservice /vendor/bin/piano-qvirt-service
     # holds; everything else resolves stock-first. Both orders were tested on
     # the device before this line was written.
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock-system/system/lib64:/system_ext/lib64:/vendor/piano-stock/lib64:/vendor/lib64:/system/lib64
+
+# The MiTEE driver, loaded only once the guest is genuinely executing.
+#
+# piano-mitee-start.sh polls the virtualization service's status and publishes this
+# property; init does the privileged work so the script needs no rights beyond
+# setting it. Weaver is started from here too, because its TA lives inside that
+# guest and starting it any earlier is what produced openSession ret=15.
+on property:vendor.piano.vm.running=1
+    insmod /vendor/piano-stock-dlkm/lib/modules/mitee_dlkm.ko
+    start vendor.weaver
+
+# The watcher publishes 0 when the VM does not come up in time. Weaver is still
+# started in that case, deliberately. TWRP's credential path blocks in a
+# one-second retry loop waiting for IWeaver/default to appear on servicemanager,
+# and if the service is never started at all that loop does not terminate: the
+# UI never renders its first page and the screen stays blank. Started and
+# failing, Weaver returns an error and TWRP falls through to its normal
+# "no Weaver" path with a usable UI.
+on property:vendor.piano.vm.running=0
+    start vendor.weaver
+
+service vendor.piano_vmwatch /vendor/bin/piano-mitee-start.sh
+    class core
+    user root
+    group root system
+    disabled
+    oneshot

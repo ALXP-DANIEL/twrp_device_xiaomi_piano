@@ -6,3 +6,7 @@ set_prop(init, vendor_piano_spu_level_prop)
 
 # KeyMint retry interval, mirroring stock build.prop.
 set_prop(init, vendor_keymint_retry_timer_prop)
+
+# The VM watch script publishes trustedvm readiness; init triggers the MiTEE
+# module load from it.
+set_prop(init, vendor_piano_vm_prop)

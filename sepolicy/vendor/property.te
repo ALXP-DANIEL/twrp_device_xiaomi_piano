@@ -17,3 +17,6 @@ vendor_internal_prop(vendor_keymint_retry_timer_prop)
 
 # Per-VM status property published by the virtualization service.
 vendor_internal_prop(vendor_piano_qvirt_prop)
+
+# Set by the VM watch script, triggered on by init to load the MiTEE driver.
+vendor_internal_prop(vendor_piano_vm_prop)

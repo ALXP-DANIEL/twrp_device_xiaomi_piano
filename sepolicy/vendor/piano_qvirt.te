@@ -92,6 +92,31 @@ type vendor_qcrosvm_exec, exec_type, file_type;
 
 allow piano_qvirt vendor_qcrosvm_exec:file { read getattr open map execute execute_no_trans };
 
+# RUNTIME AVC EVIDENCE (2026-09-15). The context= mount relabels the whole
+# system_ext filesystem, so its directories carry this type too, and the service
+# must traverse them to reach the binary:
+#
+#   avc: denied { search } for comm="binder:590_2" name="/" dev="dm-4"
+#        scontext=u:r:piano_qvirt:s0 tcontext=u:object_r:vendor_qcrosvm_exec:s0
+#        tclass=dir permissive=0
+#
+# Denied, qcrosvm never execs and qvirtservice reports
+#   trustedvm: launch failed - errno=Permission denied, exiting...
+allow piano_qvirt vendor_qcrosvm_exec:dir { search getattr open read };
+
+# RUNTIME AVC EVIDENCE (2026-09-15). With the dir rule above qcrosvm execs, and
+# the dynamic linker then calls fstatfs() on the filesystem each library was
+# found on, to decide whether it may be mapped:
+#
+#   avc: denied { getattr } for comm="qcrosvm" name="/" dev="dm-4"
+#        scontext=u:r:piano_qvirt:s0 tcontext=u:object_r:vendor_qcrosvm_exec:s0
+#        tclass=filesystem permissive=0
+#   F linker: CANNOT LINK EXECUTABLE "/system_ext/bin/qcrosvm": unable to
+#            fstatfs file for the library "libdynamicaudiolog.so"
+#
+# This is the filesystem class, not the dir class: statfs on the mount itself.
+allow piano_qvirt vendor_qcrosvm_exec:filesystem getattr;
+
 # RUNTIME AVC EVIDENCE (2026-09-15). qcrosvm now runs. Three denials from its
 # first real execution, all in the path that opens the VM's disks.
 
@@ -108,15 +133,28 @@ type vendor_vm_qti_system_file, file_type;
 allow piano_qvirt vendor_vm_qti_system_file:dir { search getattr open read };
 allow piano_qvirt vendor_vm_qti_system_file:file { read getattr open map lock ioctl };
 
-# It reads ungrouped system properties while setting the VM up.
+# It also reads an ungrouped system property while setting the VM up:
 #   avc: denied { read } name="u:object_r:default_prop:s0"
-get_prop(piano_qvirt, default_prop)
+#
+# NOT granted. A platform neverallow forbids any vendor domain from reading
+# default_prop, and the build refuses the rule outright:
+#
+#   neverallow check failed ... plat_sepolicy.cil from private/property.te:168
+#   allow at ... (allow piano_qvirt default_prop_202504 (file (read ...)))
+#
+# The denial is benign in practice -- qcrosvm hits it and carries on to open
+# its disks and create the VM, which was observed on hardware. If it ever
+# turns out to matter, the fix is to label the specific property this domain
+# needs rather than to widen access to the whole default bucket.
 
-# DAC_OVERRIDE. qcrosvm opens the VM images and the Gunyah device while the
-# filesystem permissions on the stock mounts do not match the identity it runs
-# as. Stock grants this to its own VMM domain for the same reason.
+# DAC_OVERRIDE is NOT granted. It was denied at runtime:
 #   avc: denied { dac_override } capability=1
-allow piano_qvirt self:capability dac_override;
+# but a platform neverallow forbids it for this class of domain
+# (system/sepolicy/private/domain.te:1972) and the build rejects the rule.
+#
+# It should not be needed: the service runs as root, the VM images are 0644
+# and the directories above them 0755, so ordinary permissions suffice. The
+# denial is treated as spurious unless something demonstrably fails without it.
 
 # OBSERVED LABELS (2026-09-15). Not speculative: qvirtmgr-vndr.json names both
 # VM disks by absolute path, so qcrosvm must open both, and these are the
@@ -132,9 +170,46 @@ allow piano_qvirt self:capability dac_override;
 # the filesystem refuses writes regardless of what the policy permits; the rule
 # is here so that, if read-only proves to be the blocker, the experiment is one
 # mount option rather than another build.
-allow piano_qvirt mnt_product_file:dir { search getattr open read };
-allow piano_qvirt mnt_product_file:file { read write getattr open map lock ioctl };
+# mnt_product_file is NOT granted either -- another neverallow
+# (domain.te:1553). The persist image carries that label in its own ext4
+# xattrs, so instead of widening policy the partition is mounted with an
+# explicit context= option, which overrides every label on it with one this
+# policy owns. See the mount in init.recovery.qcom.rc.
 
-# Its seccomp policy file, read at start-up.
-allow piano_qvirt system_file:file { read getattr open map };
-allow piano_qvirt system_file:dir { search getattr open read };
+# Its seccomp policy file is NOT reached by granting system_file: a platform
+# neverallow forbids a vendor domain from touching that type (domain.te:1238).
+# system_ext is mounted with context=u:object_r:vendor_qcrosvm_exec:s0 instead,
+# which relabels the whole view -- qcrosvm and its policy file alike -- to a
+# type this policy already owns.
+
+# RUNTIME AVC EVIDENCE (2026-09-15). Three partitions are mounted with an
+# explicit context= option to relabel them to types this policy owns, which is
+# how the neverallows on system_file and mnt_product_file are respected rather
+# than argued with. A context= mount makes the filesystem's own security
+# context equal to the file context, and SELinux then requires the type to be
+# allowed to associate with itself:
+#
+#   avc: denied { associate } comm="init"
+#        scontext=u:object_r:vendor_qcrosvm_exec:s0
+#        tcontext=u:object_r:vendor_qcrosvm_exec:s0 tclass=filesystem
+#
+# Without this the mount is refused outright, /system_ext never appears, and
+# the VM launch fails with a bare ENOENT because qcrosvm is not there at all.
+allow vendor_qcrosvm_exec self:filesystem associate;
+allow vendor_vm_qti_system_file self:filesystem associate;
+# The trustedvm PAS images on vm-bootsys. vendor_firmware_file is not a type in
+# this policy, so a private type is declared for the relabelled mount. The
+# kernel's firmware_class loader reads these with kernel credentials; the rules
+# below cover the service reading them directly.
+type piano_vmboot_file, file_type, vendor_file_type;
+allow piano_vmboot_file self:filesystem associate;
+allow piano_qvirt piano_vmboot_file:dir { search getattr open read };
+allow piano_qvirt piano_vmboot_file:file { read getattr open map lock ioctl };
+
+# The writable RAM copy of the guest's persist image. qcrosvm opens it
+# read-write; the stock vm-persist partition remains read-only.
+type piano_vmpersist_rw_file, file_type, vendor_file_type;
+allow piano_qvirt piano_vmpersist_rw_file:dir { search getattr open read };
+allow piano_qvirt piano_vmpersist_rw_file:file {
+    ioctl read write getattr lock append map open
+};

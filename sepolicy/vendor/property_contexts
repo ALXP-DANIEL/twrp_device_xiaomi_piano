@@ -6,3 +6,6 @@ vendor.keymint.retry_timer    u:object_r:vendor_keymint_retry_timer_prop:s0
 # Per-VM status published by the virtualization service, e.g.
 # vendor.qvirtmgr.trustedvm.status.
 vendor.qvirtmgr.    u:object_r:vendor_piano_qvirt_prop:s0
+
+# Published by piano-mitee-start.sh once trustedvm's vcpu threads are running.
+vendor.piano.vm.    u:object_r:vendor_piano_vm_prop:s0

@@ -75,3 +75,10 @@
 
 # The trustedvm guest's root filesystem on the stock product partition.
 /vendor/piano-stock-product/firmware/vm-system(/.*)?    u:object_r:vendor_vm_qti_system_file:s0
+
+# The trustedvm readiness watcher.
+/vendor/bin/piano-mitee-start\.sh    u:object_r:piano_vmwatch_exec:s0
+
+# Writable RAM copy of the trustedvm guest's persist image. The stock partition
+# stays read-only; qcrosvm opens this copy instead.
+/vendor/piano-vm-rw(/.*)?    u:object_r:piano_vmpersist_rw_file:s0

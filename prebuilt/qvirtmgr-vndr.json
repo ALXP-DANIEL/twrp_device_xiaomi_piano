@@ -14,7 +14,7 @@
                 "boot_ops"      : "start",
                 "disk" : [
                     { "image"   : "/vendor/piano-stock-product/firmware/vm-system/system.img", "label" : 10, "read_write" : false },
-                    { "image"   : "/vendor/piano-stock-vmpersist/trustedvm/persist.img", "label" : 11, "read_write" : true }
+                    { "image"   : "/vendor/piano-vm-rw/persist.img", "label" : 11, "read_write" : true }
                ],
                 "enable"        : true,
                 "autostart"     : true,
