@@ -208,7 +208,9 @@ allow piano_qvirt piano_vmboot_file:file { read getattr open map lock ioctl };
 
 # The writable RAM copy of the guest's persist image. qcrosvm opens it
 # read-write; the stock vm-persist partition remains read-only.
-type piano_vmpersist_rw_file, file_type, vendor_file_type;
+# NOT vendor_file_type: system/sepolicy/private/domain.te:751 forbids any
+# domain writing a vendor file, and this one is written by design.
+type piano_vmpersist_rw_file, file_type;
 allow piano_qvirt piano_vmpersist_rw_file:dir { search getattr open read };
 allow piano_qvirt piano_vmpersist_rw_file:file {
     ioctl read write getattr lock append map open
