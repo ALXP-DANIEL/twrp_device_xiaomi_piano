@@ -79,8 +79,21 @@ jobs:
       # exactly as the 15 GB VM did.
       - name: Setup zram
         run: |
-          sudo apt-get install -y linux-modules-extra-$(uname -r) zram-tools
-          sudo modprobe zram
+          # linux-modules-extra is only installed if zram is not already
+          # available. Installing it regenerates an initramfs on a root
+          # filesystem that maximize-build-space has already shrunk, and that
+          # has filled the disk mid-step:
+          #   cp: error copying '/lib/x86_64-linux-gnu/libcrypto.so.3' ...
+          #       No space left on device
+          # On current runners zram is a built-in module and the package is
+          # unnecessary.
+          df -h /
+          sudo apt-get install -y --no-install-recommends zram-tools
+          if ! sudo modprobe zram; then
+            sudo apt-get install -y --no-install-recommends \
+              linux-modules-extra-$(uname -r)
+            sudo modprobe zram
+          fi
           sudo sed -i 's/^#\?PERCENT=.*/PERCENT=90/' /etc/default/zramswap
           sudo sed -i 's/^#\?PRIORITY=.*/PRIORITY=1000/' /etc/default/zramswap
           sudo systemctl restart zramswap
