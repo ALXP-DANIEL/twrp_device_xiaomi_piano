@@ -5,20 +5,20 @@
 # work (loading the MiTEE module) from the property trigger, so the script
 # needs no module-loading rights, no /proc access and no capabilities.
 #
-# Why the wait exists: mitee_dlkm probes the secure world the moment it loads,
-# and if the guest is not up it gives up without ever retrying.
+# Why the script exists: Weaver's start must wait for the guest, but must also
+# fire on timeout so TWRP's credential path cannot block forever. The script
+# polls the VM status property and publishes readiness; init starts Weaver from
+# the trigger.
 #
 #   [ 2.03] mitee msgq: msgq didn't set up, try later
 #   [ 2.03] mitee smc notify connect failed
-#   [21.06] gunyah_loader: Use allocated CMA memory for trustedvm
 #
-# Nineteen seconds too early. Weaver then fails every session with
-# "openSession ret=15" even with the guest running correctly -- verified on
-# hardware, trustedvm_vcpu0/vcpu1 alive and Weaver still refusing.
-#
-# The order cannot be corrected afterwards: rmmod blocks indefinitely while a
-# TEE client holds the driver and wedges the kernel. Reproduced twice. So the
-# module has to be late on its first and only load.
+# These init-time lines appear on stock too and are transient, not a failure:
+# stock loads mitee_dlkm at 2.06s, BEFORE its VM starts at 13.16s, and the RM
+# notifier then receives the label-5 queue capabilities as VM 45 starts. A
+# module loaded only after RUNNING misses that one-shot notification. The
+# module is loaded before the VM service now (see init.recovery.qcom.rc) and
+# is never unloaded: rmmod wedges the kernel while a TEE client holds it.
 #
 # An earlier version of this script looked for qcrosvm's vcpu threads in
 # /proc. That needed to read other domains' process entries, which a platform

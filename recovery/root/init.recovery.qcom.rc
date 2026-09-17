@@ -201,14 +201,16 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     mkdir /vendor/piano-stock-dlkm 0755 root root
     wait /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} 5
     mount erofs /dev/block/mapper/vendor_dlkm${ro.boot.slot_suffix} /vendor/piano-stock-dlkm ro
-    # mitee_dlkm is deliberately NOT loaded here. It probes the secure world on
-    # load, and the trustedvm guest that hosts that secure world does not exist
-    # until roughly 19 seconds later. Loaded early it reports
-    #   mitee msgq: msgq didn't set up, try later
-    #   mitee smc notify connect failed
-    # and never retries, so Weaver fails every session with openSession ret=15
-    # even once the VM is running. It is loaded from the
-    # vendor.piano.vm.running trigger at the bottom of this file instead.
+    # mitee_dlkm is loaded from the on-boot block below, BEFORE the VM service,
+    # mirroring measured stock order (module at 2.06s, VM 45 running at 13.16s).
+    # The Gunyah resource manager publishes the VM message-queue capabilities
+    # ONCE, as the VM starts; an RM notifier that registers after that moment
+    # never receives them. Loading the module after VM 45 showed RUNNING left
+    # gh_msgq_tx_5/rx_5 absent and Weaver dead with openSession ret=15, while
+    # stock, which loads the module before its VM, gets active label-5 queues.
+    # MiTEE logs the same init-time line on stock, so that line is transient.
+    # The module is never unloaded: rmmod wedges the kernel while a TEE client
+    # holds it.
 
     # Stock persist, READ-ONLY.
     #
@@ -367,6 +369,17 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     chmod 0600 /vendor/piano-vm-rw/persist.img
     restorecon_recursive /vendor/piano-vm-rw
 
+    # MiTEE is loaded BEFORE the VM service, mirroring measured stock order
+    # (module at 2.06s, VM 45 running at 13.16s). The Gunyah resource manager
+    # publishes the VM's message-queue capabilities ONCE, as the VM starts. A
+    # module that is not yet registered as an RM notifier at that moment never
+    # receives them: loading MiTEE after the VM showed RUNNING left
+    # gh_msgq_tx_5/rx_5 absent and Weaver dead with openSession ret=15.
+    # MiTEE's own init logs "msgq didn't set up, try later" on stock too, and
+    # stock's queues then activate when the VM notification arrives -- the
+    # message is transient, not a failure. The module is never unloaded:
+    # rmmod wedges the kernel while a TEE client holds it.
+    insmod /vendor/piano-stock-dlkm/lib/modules/mitee_dlkm.ko
     start vendor.qvirtservice
     start vendor.piano_vmwatch
 
@@ -526,14 +539,10 @@ service vendor.qvirtservice /vendor/bin/piano-qvirt-service
     # the device before this line was written.
     setenv LD_LIBRARY_PATH /vendor/piano-binder/lib64:/vendor/piano-stock-system/system/lib64:/system_ext/lib64:/vendor/piano-stock/lib64:/vendor/lib64:/system/lib64
 
-# The MiTEE driver, loaded only once the guest is genuinely executing.
-#
-# piano-mitee-start.sh polls the virtualization service's status and publishes this
-# property; init does the privileged work so the script needs no rights beyond
-# setting it. Weaver is started from here too, because its TA lives inside that
-# guest and starting it any earlier is what produced openSession ret=15.
+# Weaver's start is gated on VM readiness or timeout; MiTEE is loaded earlier,
+# before the VM service, so its resource-manager notifier catches the message
+# queue capabilities published once as VM 45 starts (see the insmod block).
 on property:vendor.piano.vm.running=1
-    insmod /vendor/piano-stock-dlkm/lib/modules/mitee_dlkm.ko
     start vendor.weaver
 
 # The watcher publishes 0 when the VM does not come up in time. Weaver is still
