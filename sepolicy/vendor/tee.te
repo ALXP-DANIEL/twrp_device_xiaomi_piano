@@ -257,23 +257,32 @@ allow tee mitee_client_device:chr_file {
     ioctl read write getattr lock append map open watch watch_reads
 };
 
-# MiTEE secure file storage on persist. Stock keeps it at
-# /mnt/vendor/persist/mitee/data with the mitee_sfs_file label and grants the
-# tee domain the access below (vendor_sepolicy.cil:15753-15754). The write
-# permissions are reproduced because they are the stock rule set, but persist
-# is mounted READ-ONLY in recovery, so the filesystem refuses writes regardless
-# of what the policy permits. relabelto is deliberately dropped: nothing in
-# recovery should be relabelling persist content.
+# Owner-approved stock MiTEE SFS servicing. Stock vendor_sepolicy.cil grants
+# this access to tee_202404 on mitee_sfs_file. No relabel permissions: preserve
+# the existing secure-storage labels and do not relabel unrelated persist data.
 type mitee_sfs_file, file_type;
 type vendor_persist_file, file_type;
 
 allow tee mitee_sfs_file:dir {
-    ioctl read getattr lock open watch watch_reads search
+    ioctl read write create getattr setattr lock rename open watch watch_reads
+    add_name remove_name reparent search rmdir
 };
 allow tee mitee_sfs_file:file {
-    ioctl read getattr lock map open watch watch_reads
+    ioctl read write create getattr setattr lock append map unlink rename open
+    watch watch_reads
 };
 
 # The persist root itself, so the tee domain can traverse into the mitee
 # subdirectory above.
 allow tee vendor_persist_file:dir { search getattr open read };
+
+# Stock persist root and mitee parent carry mnt_vendor_file. Only traverse;
+# writable SFS access above remains restricted to the mitee_sfs_file type.
+allow tee mnt_vendor_file:dir { search getattr open read };
+
+# Stock supplicant publishes these properties (vendor_mitee_prop in stock CIL).
+set_prop(tee, vendor_mitee_prop)
+
+# Stock tee_202404 -> vendor_gunyah_chr_device, narrowed to operations used
+# through /dev/qgunyah; this tree names that same node vendor_qgunyah_device.
+allow tee vendor_qgunyah_device:chr_file { ioctl read write getattr lock map open };

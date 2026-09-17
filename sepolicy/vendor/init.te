@@ -10,3 +10,7 @@ set_prop(init, vendor_keymint_retry_timer_prop)
 # The VM watch script publishes trustedvm readiness; init triggers the MiTEE
 # module load from it.
 set_prop(init, vendor_piano_vm_prop)
+
+# Stock init announces the supplicant service start through vendor.teefs_state.
+# Actual boot_completed/rpmb_state remain owned by the supplicant.
+set_prop(init, vendor_mitee_prop)

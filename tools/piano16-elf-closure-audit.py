@@ -53,6 +53,11 @@ INERT_OBJECTS = {
 # only valid while every missing library is confirmed present in the stock
 # vendor image, which is checked on device during Phase 3/4 validation.
 RUNTIME_MOUNT_OBJECTS = {
+    "vendor/bin/piano-tee-supplicant":
+        "unmodified stock supplicant; libteecli is packaged. libsi, libqdutils "
+        "and libQSEEComAPI verified on stock vendor (84736, 68768, 85152 bytes); "
+        "service resolves them via read-only /vendor/piano-stock/lib64. "
+        "Interface library vendor.qti.qvirt-V1-ndk is packaged.",
     "vendor/bin/hw/piano-gatekeeper":
         "links the stock QTI Gatekeeper runtime, resolved from "
         "/vendor/piano-stock/lib64.",

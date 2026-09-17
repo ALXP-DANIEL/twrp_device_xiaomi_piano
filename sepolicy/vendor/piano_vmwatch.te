@@ -1,21 +1,10 @@
-# Xiaomi Pad 8 Pro (piano) — trustedvm readiness watcher.
-#
-# A shell script whose only job is to notice when the virtualization service
-# reports the guest started, and publish one property. init loads the MiTEE
-# module from that property, so this domain never needs module-loading rights.
-#
-# It gets a private domain rather than borrowing u:r:recovery:s0, because a
-# platform neverallow forbids the recovery domain from setting a vendor
-# property type (property.te:492).
-#
-# Everything it does is reading one property and setting another. An earlier
-# version scanned /proc for qcrosvm's vcpu threads and needed dac_read_search
-# plus read access to other domains' process entries; both are refused by
-# neverallows (domain.te:1982 and domain.te:1238), and neither is necessary.
+# Xiaomi Pad 8 Pro (piano) — bounded MiTEE readiness watcher.
+# Reads the stock supplicant's boot-complete property and publishes the Weaver
+# startup/fallback result. No module-loading or cross-domain /proc access.
 type piano_vmwatch, domain;
 type piano_vmwatch_exec, exec_type, vendor_file_type, file_type;
 
 init_daemon_domain(piano_vmwatch)
 
-get_prop(piano_vmwatch, vendor_piano_qvirt_prop)
+get_prop(piano_vmwatch, vendor_mitee_prop)
 set_prop(piano_vmwatch, vendor_piano_vm_prop)

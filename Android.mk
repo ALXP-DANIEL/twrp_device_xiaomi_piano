@@ -191,3 +191,31 @@ LOCAL_MODULE_STEM := qvirtmgr-vndr.json
 LOCAL_SRC_FILES := prebuilt/qvirtmgr-vndr.json
 LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/etc
 include $(BUILD_PREBUILT)
+
+# Unmodified stock Xiaomi OEMVM / OP-TEE supplicant.
+# SHA256 afeb3881659771428692b259c64249c573370b83bac90f06007e2a278a9ffb62
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_tee_supplicant
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := piano-tee-supplicant
+LOCAL_SRC_FILES := prebuilt/tee-supplicant/tee-supplicant
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/bin
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)
+
+# Stock ODM client library, kept byte-identical alongside the supplicant.
+# SHA256 7ca0e520dc582c8b2700a6ac490c9da6ed1d44724db7e4c73ade7357b368a65f
+include $(CLEAR_VARS)
+LOCAL_MODULE := piano_teecli
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_STEM := libteecli.so
+LOCAL_SRC_FILES := prebuilt/tee-supplicant/libteecli.so
+LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/vendor/lib64
+LOCAL_MULTILIB := 64
+LOCAL_STRIP_MODULE := false
+LOCAL_CHECK_ELF_FILES := false
+include $(BUILD_PREBUILT)

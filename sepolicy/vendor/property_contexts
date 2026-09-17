@@ -7,5 +7,10 @@ vendor.keymint.retry_timer    u:object_r:vendor_keymint_retry_timer_prop:s0
 # vendor.qvirtmgr.trustedvm.status.
 vendor.qvirtmgr.    u:object_r:vendor_piano_qvirt_prop:s0
 
-# Published by piano-mitee-start.sh once trustedvm's vcpu threads are running.
+# Published by the bounded MiTEE readiness watcher.
 vendor.piano.vm.    u:object_r:vendor_piano_vm_prop:s0
+
+# Exact stock property labels; no fabricated readiness values.
+vendor.teefs_state    u:object_r:vendor_mitee_prop:s0
+vendor.mitee_vm.boot_completed    u:object_r:vendor_mitee_prop:s0
+vendor.mitee_vm.rpmb_state    u:object_r:vendor_mitee_prop:s0

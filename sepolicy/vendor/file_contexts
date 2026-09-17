@@ -48,6 +48,9 @@
 # the tee domain already carries the smcinvoke and DMA-heap access it needs.
 /vendor/bin/piano-minkdaemon    u:object_r:tee_exec:s0
 
+# Stock supplicant uses the same tee_exec transition on HyperOS.
+/vendor/bin/piano-tee-supplicant    u:object_r:tee_exec:s0
+
 # MiTEE kernel driver nodes, created by mitee_dlkm.ko. Stock piano labels.
 /dev/tee[0-9]+       u:object_r:mitee_client_device:s0
 /dev/teepriv[0-9]+   u:object_r:mitee_client_device:s0

@@ -31,9 +31,11 @@
                 "boot_wait_time"   : 2,
                 "pre_boot_ops"     : "create",
                 "boot_ops"         : "start",
-                "disk" : [],
-                "enable"           : true,
-                "autostart"        : true,
+                "disk" : [
+                    { "image"      : "/product/vm-system/oemvm/system.img", "label" : 13, "read_write" : false }
+               ],
+                "enable"           : false,
+                "autostart"        : false,
                 "legacy"           : true,
                 "no_fs_dependency" : false,
                 "vm_ssr_enable"    : false
