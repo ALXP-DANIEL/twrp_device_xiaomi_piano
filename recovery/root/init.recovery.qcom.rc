@@ -358,19 +358,24 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b04 /odm/firmware/o8/trustedvm.b04
 
     # OEMVM (VMID 49, loader@1) is the MiTEE transport peer (DT mitee-oemvm,
-    # peer-name 4). Stock loads its PAS image via request_firmware during the
-    # VM manager's SET_FW_NAME call; its .mdt/.b00-.b05 live on the modem
-    # firmware partition, already mounted read-only above at
-    # /vendor/firmware_mnt. Linked into the active firmware directory the same
-    # way as trustedvm. OEMVM has no virtio disk image on piano; its VM entry
-    # in qvirtmgr-vndr.json is enabled with an empty disk list.
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.mdt /odm/firmware/o8/oemvm.mdt
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b00 /odm/firmware/o8/oemvm.b00
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b01 /odm/firmware/o8/oemvm.b01
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b02 /odm/firmware/o8/oemvm.b02
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b03 /odm/firmware/o8/oemvm.b03
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b04 /odm/firmware/o8/oemvm.b04
-    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b05 /odm/firmware/o8/oemvm.b05
+    # peer-name 4). Its PAS image (.mdt + b00-b05, ~14 MB) lives on the modem
+    # firmware partition, mounted READ-ONLY above at /vendor/firmware_mnt.
+    #
+    # COPIED, not symlinked: the kernel's request_firmware path reads the file
+    # under the kernel_read_file LSM hook, and a read through a symlink into
+    # the vfat-labeled modem mount fails EACCES (-13) in this policy. Real
+    # files on the recovery rootfs load fine -- the Novatek touch blobs are
+    # served from this exact directory. Copies are made at every boot into the
+    # ramdisk and vanish at reboot; the modem partition itself is never
+    # written. OEMVM has no virtio disk image on piano; its VM entry in
+    # qvirtmgr-vndr.json is enabled with an empty disk list.
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.mdt /odm/firmware/o8/oemvm.mdt
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b00 /odm/firmware/o8/oemvm.b00
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b01 /odm/firmware/o8/oemvm.b01
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b02 /odm/firmware/o8/oemvm.b02
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b03 /odm/firmware/o8/oemvm.b03
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b04 /odm/firmware/o8/oemvm.b04
+    copy /vendor/firmware_mnt/image/oemvm/boot/oemvm.b05 /odm/firmware/o8/oemvm.b05
 
     # The guest's persist image is opened READ-WRITE by qcrosvm
     # ("read_write": true in qvirtmgr-vndr.json), but vm-persist is mounted
