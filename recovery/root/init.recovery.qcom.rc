@@ -357,6 +357,21 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b03 /odm/firmware/o8/trustedvm.b03
     symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b04 /odm/firmware/o8/trustedvm.b04
 
+    # OEMVM (VMID 49, loader@1) is the MiTEE transport peer (DT mitee-oemvm,
+    # peer-name 4). Stock loads its PAS image via request_firmware during the
+    # VM manager's SET_FW_NAME call; its .mdt/.b00-.b05 live on the modem
+    # firmware partition, already mounted read-only above at
+    # /vendor/firmware_mnt. Linked into the active firmware directory the same
+    # way as trustedvm. OEMVM has no virtio disk image on piano; its VM entry
+    # in qvirtmgr-vndr.json is enabled with an empty disk list.
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.mdt /odm/firmware/o8/oemvm.mdt
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b00 /odm/firmware/o8/oemvm.b00
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b01 /odm/firmware/o8/oemvm.b01
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b02 /odm/firmware/o8/oemvm.b02
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b03 /odm/firmware/o8/oemvm.b03
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b04 /odm/firmware/o8/oemvm.b04
+    symlink /vendor/firmware_mnt/image/oemvm/boot/oemvm.b05 /odm/firmware/o8/oemvm.b05
+
     # The guest's persist image is opened READ-WRITE by qcrosvm
     # ("read_write": true in qvirtmgr-vndr.json), but vm-persist is mounted
     # read-only here and stays that way: nothing in this recovery writes to a
