@@ -329,7 +329,7 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # TWRP splash with no UI and a load average above 11.
     #
     # It is unnecessary anyway: the guest's blobs are symlinked into the
-    # recovery's own /odm/firmware below, which the kernel already searches.
+    # recovery's own /odm/firmware/o8 below, the active firmware directory.
 
     # vm-bootsys, which carries the guest's signed kernel.
     #
@@ -337,30 +337,23 @@ on property:twrp.super.symlinks_created=true && property:vendor.piano.stock.moun
     # nowhere else: they are not on system, vendor, odm, product, system_ext or
     # modem. Without it the loader reports
     #   Direct firmware load for trustedvm.mdt failed with error -2
-    # and the VM cannot be authenticated. The partition is mounted READ-ONLY
-    # and the firmware search path is pointed straight at the boot directory.
+    # and the VM cannot be authenticated. The partition is mounted READ-ONLY;
+    # symlinks below expose its blobs without changing the firmware search path.
     mkdir /vendor/piano-stock-vmboot 0755 root root
     wait /dev/block/by-name/vm-bootsys${ro.boot.slot_suffix} 20
     mount ext4 /dev/block/by-name/vm-bootsys${ro.boot.slot_suffix} /vendor/piano-stock-vmboot ro nosuid nodev noatime context=u:object_r:piano_vmboot_file:s0
-    # The guest's blobs are LINKED into /odm/firmware, which the kernel already
-    # searches, rather than repointing the firmware search path at them.
-    #
-    # firmware_class's path parameter REPLACES the search list, it does not
-    # extend it. Setting it to the vm-bootsys boot directory made the touch
-    # controller's own firmware unreachable:
-    #
-    #   NVT-ts spi0.0: Direct firmware load for
-    #     novatek_nt36532_piano_fw_boe.bin failed with error -2
-    #   TpFirmwareLoadFail,vendor_name:novatek
-    #
-    # The UI rendered but the panel never responded. Symlinks leave every other
-    # driver's firmware exactly where it was.
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.mdt /odm/firmware/trustedvm.mdt
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b00 /odm/firmware/trustedvm.b00
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b01 /odm/firmware/trustedvm.b01
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b02 /odm/firmware/trustedvm.b02
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b03 /odm/firmware/trustedvm.b03
-    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b04 /odm/firmware/trustedvm.b04
+    # The guest's blobs are linked into the active firmware directory,
+    # /odm/firmware/o8 (verified in firmware_class/parameters/path).
+    # Links in its parent left trustedvm.mdt unreachable: the first loader
+    # attempt returned ENOENT; retries reported the VMID already allocated.
+    # Preserve the selected path and its existing Novatek touch firmware.
+    # Pointing that path at vm-bootsys previously broke touch firmware loading.
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.mdt /odm/firmware/o8/trustedvm.mdt
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b00 /odm/firmware/o8/trustedvm.b00
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b01 /odm/firmware/o8/trustedvm.b01
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b02 /odm/firmware/o8/trustedvm.b02
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b03 /odm/firmware/o8/trustedvm.b03
+    symlink /vendor/piano-stock-vmboot/trustedvm/boot/trustedvm.b04 /odm/firmware/o8/trustedvm.b04
 
     # The guest's persist image is opened READ-WRITE by qcrosvm
     # ("read_write": true in qvirtmgr-vndr.json), but vm-persist is mounted
